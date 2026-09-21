@@ -221,7 +221,7 @@
 
     <div class="card">
       <h2>職員管理</h2>
-      <div class="sub">新しい職員の追加、名前変更、退職者などの非表示ができます。非表示にしても過去の夜勤記録は消えません。</div>
+      <div class="sub">新しい職員の追加、名前変更、削除ができます。職員を削除すると、その職員の夜勤希望登録もすべて削除されます。</div>
       <div class="form-grid" style="margin-top:12px;">
         <div>
           <label for="newStaffName">新しい職員名</label>
@@ -419,7 +419,7 @@
 
       const status = document.createElement("div");
       status.className = "staff-manage-status";
-      status.textContent = staff.active ? "表示中" : "非表示";
+      status.textContent = staff.active ? "登録中" : "旧非表示データ";
 
       info.appendChild(name);
       info.appendChild(status);
@@ -455,34 +455,37 @@
         showMessage("職員名を変更しました。");
       });
 
-      const activeBtn = document.createElement("button");
-      activeBtn.type = "button";
-      activeBtn.className = (staff.active ? "danger" : "success") + " small-btn";
-      activeBtn.textContent = staff.active ? "非表示にする" : "再表示する";
-      activeBtn.addEventListener("click", async function() {
-        const nextActive = !staff.active;
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "danger small-btn";
+      deleteBtn.textContent = "削除";
+      deleteBtn.addEventListener("click", async function() {
         const ok = confirm(
-          staff.name + " さんを" +
-          (nextActive ? "職員一覧に再表示しますか？" : "職員一覧から非表示にしますか？")
+          staff.name + " さんを削除しますか？\n\n" +
+          "この職員の過去・今後の夜勤希望登録もすべて削除されます。"
         );
         if (!ok) return;
 
-        const result = await client.rpc("admin_set_staff_active", {
-          p_staff_id: staff.id,
-          p_active: nextActive
+        const secondOk = confirm(
+          "本当に削除しますか？ この操作は元に戻せません。"
+        );
+        if (!secondOk) return;
+
+        const result = await client.rpc("admin_delete_staff", {
+          p_staff_id: staff.id
         });
 
         if (result.error) {
-          showMessage("変更できませんでした：" + result.error.message, "error");
+          showMessage("削除できませんでした：" + result.error.message, "error");
           return;
         }
 
         await refreshStaffManagement();
-        showMessage(nextActive ? "職員を再表示しました。" : "職員を非表示にしました。");
+        showMessage(staff.name + " さんを削除しました。");
       });
 
       actions.appendChild(renameBtn);
-      actions.appendChild(activeBtn);
+      actions.appendChild(deleteBtn);
 
       row.appendChild(info);
       row.appendChild(actions);
