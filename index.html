@@ -297,7 +297,7 @@
   <div class="card">
     <h1>🌙 ヤンキース 夜勤希望</h1>
     <div class="sub">
-      夜勤に入れる日を選択して登録してください。<br>
+      夜勤に入れる日を複数選択して、まとめて登録できます。<br>
       同じ日に複数人登録できます。
     </div>
   </div>
@@ -570,16 +570,6 @@
       return;
     }
 
-    const ownRegistration =
-  assigned.find(person => person.staffId === selectedStaffId);
-
-if (ownRegistration) {
-  selectedDates.clear();
-  selectedDates.add(key);
-  renderCalendar();
-  return;
-}
-
     if (selectedDates.has(key)) {
       selectedDates.delete(key);
     } else {
@@ -609,31 +599,39 @@ if (ownRegistration) {
       return;
     }
 
-    const ownRegistered =
-  dates.length === 1 &&
-  (schedule[dates[0]] || [])
-    .some(person => person.staffId === selectedStaffId);
-    if (ownRegistered) {
+    const ownDates =
+      dates.filter(d =>
+        (schedule[d] || [])
+          .some(person => person.staffId === selectedStaffId)
+      );
+
+    const newDates =
+      dates.filter(d =>
+        !(schedule[d] || [])
+          .some(person => person.staffId === selectedStaffId)
+      );
+
+    if (ownDates.length > 0 && newDates.length > 0) {
       selectedInfo.textContent =
-        `${dates[0]} の登録を選択中`;
-
-      registerBtn.disabled = true;
-      cancelBtn.style.display = "block";
+        `登録 ${newDates.length}日 / 取消 ${ownDates.length}日を選択中`;
+    } else if (ownDates.length > 0) {
+      selectedInfo.textContent =
+        `${ownDates.length}日分の自分の登録を選択中`;
     } else {
-      const newDates =
-  dates.filter(d =>
-    !(schedule[d] || [])
-      .some(person => person.staffId === selectedStaffId)
-  );
-
-selectedInfo.textContent =
-  `${newDates.length}日選択中`;
-
-registerBtn.disabled =
-  newDates.length === 0;
-
-      cancelBtn.style.display = "none";
+      selectedInfo.textContent =
+        `${newDates.length}日選択中`;
     }
+
+    registerBtn.disabled =
+      newDates.length === 0;
+
+    cancelBtn.style.display =
+      ownDates.length > 0 ? "block" : "none";
+
+    cancelBtn.textContent =
+      ownDates.length > 0
+        ? `選択した自分の登録を取り消す（${ownDates.length}日）`
+        : "選択した自分の登録を取り消す";
   }
 
   staffSelect.addEventListener("change", () => {
@@ -703,14 +701,17 @@ registerBtn.disabled =
 
   cancelBtn.addEventListener("click", async () => {
     const staffId = staffSelect.value;
-    const dates = [...selectedDates];
 
-    if (dates.length !== 1) return;
+    const dates =
+      [...selectedDates].filter(d =>
+        (schedule[d] || [])
+          .some(person => person.staffId === staffId)
+      );
 
-    const workDate = dates[0];
+    if (dates.length === 0) return;
 
     const ok = confirm(
-      `${workDate} の夜勤登録を取り消しますか？`
+      `${dates.length}日分の夜勤登録を取り消しますか？`
     );
 
     if (!ok) return;
@@ -718,30 +719,37 @@ registerBtn.disabled =
     cancelBtn.disabled = true;
     cancelBtn.textContent = "取消中...";
 
-    const { error } = await client.rpc(
-      "cancel_night",
-      {
-        p_staff_id: staffId,
-        p_work_date: workDate
-      }
-    );
+    let success = 0;
+    let failed = 0;
 
-    cancelBtn.disabled = false;
-    cancelBtn.textContent =
-      "選択した自分の登録を取り消す";
-
-    if (error) {
-      showMessage(
-        "取り消せませんでした：" + error.message,
-        "error"
+    for (const workDate of dates) {
+      const { error } = await client.rpc(
+        "cancel_night",
+        {
+          p_staff_id: staffId,
+          p_work_date: workDate
+        }
       );
-      return;
+
+      if (error) {
+        failed++;
+      } else {
+        success++;
+      }
     }
 
+    cancelBtn.disabled = false;
     selectedDates.clear();
     await loadSchedule();
 
-    showMessage("夜勤登録を取り消しました。");
+    if (failed === 0) {
+      showMessage(`${success}日分の夜勤登録を取り消しました。`);
+    } else {
+      showMessage(
+        `${success}日分を取り消しました。 ${failed}日は取り消せませんでした。`,
+        "error"
+      );
+    }
   });
 
   document.getElementById("prevMonth")
