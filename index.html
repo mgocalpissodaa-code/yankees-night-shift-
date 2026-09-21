@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>ヤンキース 夜勤希望</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+        "Yu Gothic", sans-serif;
+      background: #f5f7fb;
+      color: #1f2937;
+    }
+
+    .app {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 18px 12px 40px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 3px 16px rgba(0, 0, 0, 0.06);
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin: 0 0 6px;
+    }
+
+    .sub {
+      font-size: 14px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    select {
+      width: 100%;
+      padding: 14px;
+      font-size: 17px;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      background: white;
+    }
+
+    .month-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .month-title {
+      font-size: 24px;
+      font-weight: 800;
+      text-align: center;
+      flex: 1;
+    }
+
+    .nav-btn {
+      border: 0;
+      background: #eef2ff;
+      color: #2563eb;
+      border-radius: 12px;
+      width: 48px;
+      height: 48px;
+      font-size: 25px;
+      font-weight: bold;
+    }
+
+    .weekdays,
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+    }
+
+    .weekday {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #64748b;
+      padding-bottom: 5px;
+    }
+
+    .weekday.sun {
+      color: #ef4444;
+    }
+
+    .weekday.sat {
+      color: #3b82f6;
+    }
+
+    .day {
+      position: relative;
+      min-height: 102px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #fff;
+      padding: 7px 5px;
+      overflow: hidden;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .day.empty {
+      visibility: hidden;
+    }
+
+    .day.past {
+      opacity: 0.42;
+      cursor: default;
+    }
+
+    .day.selected {
+      border: 2px solid #2563eb;
+      background: #eff6ff;
+    }
+
+    .day.full {
+      background: #fff1f2;
+    }
+
+    .date-num {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .sun-date {
+      color: #ef4444;
+    }
+
+    .sat-date {
+      color: #3b82f6;
+    }
+
+    .count {
+      font-size: 12px;
+      font-weight: 800;
+      border-radius: 7px;
+      padding: 4px 3px;
+      text-align: center;
+      margin-bottom: 5px;
+      background: #ecfdf5;
+      color: #15803d;
+    }
+
+    .full .count {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+
+    .staff-name {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 5px 4px;
+      border-radius: 7px;
+      background: #e0f2fe;
+      text-align: center;
+      word-break: break-all;
+    }
+
+    .selected-mark {
+      margin-top: 5px;
+      font-size: 11px;
+      color: #2563eb;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .actions {
+      position: sticky;
+      bottom: 10px;
+      z-index: 20;
+      background: rgba(255,255,255,0.97);
+      border-radius: 18px;
+      padding: 12px;
+      box-shadow: 0 4px 25px rgba(0,0,0,.13);
+      margin-top: 14px;
+    }
+
+    .selected-info {
+      text-align: center;
+      font-size: 14px;
+      margin-bottom: 9px;
+      color: #475569;
+      font-weight: 700;
+    }
+
+    .register-btn,
+    .cancel-btn {
+      width: 100%;
+      padding: 15px;
+      border: 0;
+      border-radius: 13px;
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .register-btn {
+      background: #2563eb;
+      color: white;
+    }
+
+    .register-btn:disabled {
+      opacity: .4;
+    }
+
+    .cancel-btn {
+      background: #fee2e2;
+      color: #b91c1c;
+      margin-top: 8px;
+    }
+
+    .message {
+      display: none;
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .message.success {
+      display: block;
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .message.error {
+      display: block;
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 28px;
+      color: #64748b;
+    }
+
+    @media (max-width: 480px) {
+      .app {
+        padding-left: 6px;
+        padding-right: 6px;
+      }
+
+      .card {
+        padding: 11px 7px;
+      }
+
+      .calendar,
+      .weekdays {
+        gap: 3px;
+      }
+
+      .day {
+        min-height: 94px;
+        padding: 5px 3px;
+      }
+
+      .date-num {
+        font-size: 17px;
+      }
+
+      .count,
+      .staff-name {
+        font-size: 11px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+<div class="app">
+
+  <div class="card">
+    <h1>🌙 ヤンキース 夜勤希望</h1>
+    <div class="sub">
+      夜勤に入れる日を選択して登録してください。<br>
+      1日につき1人まで登録できます。
+    </div>
+  </div>
+
+  <div id="message" class="message"></div>
+
+  <div class="card">
+    <label for="staffSelect">あなたの名前</label>
+    <select id="staffSelect">
+      <option value="">名前を選択してください</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <div class="month-nav">
+      <button class="nav-btn" id="prevMonth">‹</button>
+      <div class="month-title" id="monthTitle"></div>
+      <button class="nav-btn" id="nextMonth">›</button>
+    </div>
+
+    <div class="weekdays">
+      <div class="weekday sun">日</div>
+      <div class="weekday">月</div>
+      <div class="weekday">火</div>
+      <div class="weekday">水</div>
+      <div class="weekday">木</div>
+      <div class="weekday">金</div>
+      <div class="weekday sat">土</div>
+    </div>
+
+    <div id="calendar" class="calendar">
+      <div class="loading">読み込み中...</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <div class="selected-info" id="selectedInfo">
+      日付を選択してください
+    </div>
+
+    <button id="registerBtn" class="register-btn" disabled>
+      選択した日に夜勤できます
+    </button>
+
+    <button id="cancelBtn" class="cancel-btn" style="display:none;">
+      選択した自分の登録を取り消す
+    </button>
+  </div>
+
+</div>
+
+<script>
+  const SUPABASE_URL =
+    "https://ujdexmngrwqixeirvoil.supabase.co";
+
+  const SUPABASE_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqZGV4bW5ncndxaXhlaXJ2b2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5NzAzNzIsImV4cCI6MjEwNTU0NjM3Mn0.aMJo_dwqnVmGL72jUCG0vJ7G4Q72fpJOPRsmhwjeC4M";
+
+  const client = supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+  );
+
+  let currentDate = new Date();
+  currentDate.setDate(1);
+
+  let staffs = [];
+  let schedule = {};
+  let selectedDates = new Set();
+
+  const staffSelect = document.getElementById("staffSelect");
+  const calendar = document.getElementById("calendar");
+  const monthTitle = document.getElementById("monthTitle");
+  const registerBtn = document.getElementById("registerBtn");
+  const cancelBtn = document.getElementById("cancelBtn");
+  const selectedInfo = document.getElementById("selectedInfo");
+  const message = document.getElementById("message");
+
+  function dateKey(year, month, day) {
+    return `${year}-${String(month + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  }
+
+  function todayKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+
+  function showMessage(text, type = "success") {
+    message.className = `message ${type}`;
+    message.textContent = text;
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+
+    setTimeout(() => {
+      message.className = "message";
+    }, 4500);
+  }
+
+  async function loadStaffs() {
+    const { data, error } = await client.rpc("get_active_staffs");
+
+    if (error) {
+      showMessage("職員一覧を取得できませんでした：" + error.message, "error");
+      return;
+    }
+
+    staffs = data || [];
+
+    staffSelect.innerHTML =
+      '<option value="">名前を選択してください</option>';
+
+    staffs.forEach(staff => {
+      const option = document.createElement("option");
+      option.value = staff.id;
+      option.textContent = staff.name;
+      staffSelect.appendChild(option);
+    });
+  }
+
+  async function loadSchedule() {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    const startDate = dateKey(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const endDate = dateKey(year, month, lastDay);
+
+    const { data, error } = await client.rpc(
+      "get_night_schedule",
+      {
+        p_start_date: startDate,
+        p_end_date: endDate
+      }
+    );
+
+    if (error) {
+      showMessage("勤務状況を取得できませんでした：" + error.message, "error");
+      return;
+    }
+
+    schedule = {};
+
+    (data || []).forEach(row => {
+      schedule[row.work_date] = {
+        staffId: row.staff_id,
+        staffName: row.staff_name
+      };
+    });
+
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    calendar.innerHTML = "";
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    monthTitle.textContent =
+      `${year}年 ${month + 1}月`;
+
+    const firstWeekday =
+      new Date(year, month, 1).getDay();
+
+    const lastDay =
+      new Date(year, month + 1, 0).getDate();
+
+    for (let i = 0; i < firstWeekday; i++) {
+      const empty = document.createElement("div");
+      empty.className = "day empty";
+      calendar.appendChild(empty);
+    }
+
+    for (let day = 1; day <= lastDay; day++) {
+      const key = dateKey(year, month, day);
+      const weekday =
+        new Date(year, month, day).getDay();
+
+      const assigned = schedule[key];
+      const isPast = key < todayKey();
+      const isSelected = selectedDates.has(key);
+
+      const el = document.createElement("div");
+      el.className = "day";
+
+      if (isPast) el.classList.add("past");
+      if (assigned) el.classList.add("full");
+      if (isSelected) el.classList.add("selected");
+
+      let dateClass = "";
+      if (weekday === 0) dateClass = "sun-date";
+      if (weekday === 6) dateClass = "sat-date";
+
+      el.innerHTML = `
+        <div class="date-num ${dateClass}">
+          ${day}
+        </div>
+
+        <div class="count">
+          ${assigned ? "1/1人" : "0/1人"}
+        </div>
+
+        ${
+          assigned
+            ? `<div class="staff-name">${assigned.staffName}</div>`
+            : ""
+        }
+
+        ${
+          isSelected
+            ? `<div class="selected-mark">✓ 選択中</div>`
+            : ""
+        }
+      `;
+
+      if (!isPast) {
+        el.addEventListener("click", () => {
+          handleDateTap(key);
+        });
+      }
+
+      calendar.appendChild(el);
+    }
+
+    updateActionArea();
+  }
+
+  function handleDateTap(key) {
+    const selectedStaffId = staffSelect.value;
+    const assigned = schedule[key];
+
+    if (!selectedStaffId) {
+      showMessage("先に自分の名前を選択してください。", "error");
+      return;
+    }
+
+    if (assigned) {
+      if (assigned.staffId === selectedStaffId) {
+        selectedDates.clear();
+        selectedDates.add(key);
+        renderCalendar();
+        return;
+      }
+
+      showMessage(
+        `${assigned.staffName}さんが登録済みです。`,
+        "error"
+      );
+      return;
+    }
+
+    if (selectedDates.has(key)) {
+      selectedDates.delete(key);
+    } else {
+      selectedDates.add(key);
+    }
+
+    renderCalendar();
+  }
+
+  function updateActionArea() {
+    const selectedStaffId = staffSelect.value;
+    const dates = [...selectedDates];
+
+    if (!selectedStaffId) {
+      selectedInfo.textContent =
+        "先に名前を選択してください";
+      registerBtn.disabled = true;
+      cancelBtn.style.display = "none";
+      return;
+    }
+
+    if (dates.length === 0) {
+      selectedInfo.textContent =
+        "夜勤に入れる日を選択してください";
+      registerBtn.disabled = true;
+      cancelBtn.style.display = "none";
+      return;
+    }
+
+    const ownRegistered =
+      dates.length === 1 &&
+      schedule[dates[0]] &&
+      schedule[dates[0]].staffId === selectedStaffId;
+
+    if (ownRegistered) {
+      selectedInfo.textContent =
+        `${dates[0]} の登録を選択中`;
+
+      registerBtn.disabled = true;
+      cancelBtn.style.display = "block";
+    } else {
+      const freeDates =
+        dates.filter(d => !schedule[d]);
+
+      selectedInfo.textContent =
+        `${freeDates.length}日選択中`;
+
+      registerBtn.disabled =
+        freeDates.length === 0;
+
+      cancelBtn.style.display = "none";
+    }
+  }
+
+  staffSelect.addEventListener("change", () => {
+    selectedDates.clear();
+    renderCalendar();
+  });
+
+  registerBtn.addEventListener("click", async () => {
+    const staffId = staffSelect.value;
+
+    if (!staffId) {
+      showMessage("名前を選択してください。", "error");
+      return;
+    }
+
+    const dates =
+      [...selectedDates].filter(d => !schedule[d]);
+
+    if (dates.length === 0) return;
+
+    registerBtn.disabled = true;
+    registerBtn.textContent = "登録中...";
+
+    const successDates = [];
+    const failed = [];
+
+    for (const workDate of dates) {
+      const { error } = await client.rpc(
+        "register_night",
+        {
+          p_staff_id: staffId,
+          p_work_date: workDate
+        }
+      );
+
+      if (error) {
+        failed.push({
+          date: workDate,
+          message: error.message
+        });
+      } else {
+        successDates.push(workDate);
+      }
+    }
+
+    selectedDates.clear();
+
+    await loadSchedule();
+
+    registerBtn.textContent =
+      "選択した日に夜勤できます";
+
+    if (failed.length === 0) {
+      showMessage(
+        `${successDates.length}日分を登録しました。`
+      );
+    } else {
+      showMessage(
+        `${successDates.length}日登録しました。${failed.length}日は登録できませんでした。`,
+        "error"
+      );
+    }
+  });
+
+  cancelBtn.addEventListener("click", async () => {
+    const staffId = staffSelect.value;
+    const dates = [...selectedDates];
+
+    if (dates.length !== 1) return;
+
+    const workDate = dates[0];
+
+    const ok = confirm(
+      `${workDate} の夜勤登録を取り消しますか？`
+    );
+
+    if (!ok) return;
+
+    cancelBtn.disabled = true;
+    cancelBtn.textContent = "取消中...";
+
+    const { error } = await client.rpc(
+      "cancel_night",
+      {
+        p_staff_id: staffId,
+        p_work_date: workDate
+      }
+    );
+
+    cancelBtn.disabled = false;
+    cancelBtn.textContent =
+      "選択した自分の登録を取り消す";
+
+    if (error) {
+      showMessage(
+        "取り消せませんでした：" + error.message,
+        "error"
+      );
+      return;
+    }
+
+    selectedDates.clear();
+    await loadSchedule();
+
+    showMessage("夜勤登録を取り消しました。");
+  });
+
+  document.getElementById("prevMonth")
+    .addEventListener("click", async () => {
+      currentDate.setMonth(
+        currentDate.getMonth() - 1
+      );
+      selectedDates.clear();
+      await loadSchedule();
+    });
+
+  document.getElementById("nextMonth")
+    .addEventListener("click", async () => {
+      currentDate.setMonth(
+        currentDate.getMonth() + 1
+      );
+      selectedDates.clear();
+      await loadSchedule();
+    });
+
+  async function start() {
+    await loadStaffs();
+    await loadSchedule();
+  }
+
+  start();
+</script>
+
+</body>
+</html>
