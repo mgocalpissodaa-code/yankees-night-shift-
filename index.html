@@ -135,9 +135,9 @@
       background: #eff6ff;
     }
 
-    .day.full {
-      background: #fff1f2;
-    }
+    .day.has-registrations {
+  background: #fff1f2;
+}
 
     .date-num {
       font-size: 18px;
@@ -164,10 +164,10 @@
       color: #15803d;
     }
 
-    .full .count {
-      background: #fee2e2;
-      color: #b91c1c;
-    }
+    .has-registrations .count {
+  background: #fee2e2;
+  color: #b91c1c;
+}
 
     .staff-name {
       font-size: 13px;
@@ -297,7 +297,7 @@
     <h1>🌙 ヤンキース 夜勤希望</h1>
     <div class="sub">
       夜勤に入れる日を選択して登録してください。<br>
-      1日につき1人まで登録できます。
+      同じ日に複数人登録できます。
     </div>
   </div>
 
@@ -442,12 +442,16 @@
 
     schedule = {};
 
-    (data || []).forEach(row => {
-      schedule[row.work_date] = {
-        staffId: row.staff_id,
-        staffName: row.staff_name
-      };
-    });
+   (data || []).forEach(row => {
+  if (!schedule[row.work_date]) {
+    schedule[row.work_date] = [];
+  }
+
+  schedule[row.work_date].push({
+    staffId: row.staff_id,
+    staffName: row.staff_name
+  });
+});
 
     renderCalendar();
   }
@@ -478,7 +482,7 @@
       const weekday =
         new Date(year, month, day).getDay();
 
-      const assigned = schedule[key];
+      const assigned = schedule[key] || [];
       const isPast = key < todayKey();
       const isSelected = selectedDates.has(key);
 
@@ -486,7 +490,7 @@
       el.className = "day";
 
       if (isPast) el.classList.add("past");
-      if (assigned) el.classList.add("full");
+      if (assigned.length > 0) el.classList.add("has-registrations");
       if (isSelected) el.classList.add("selected");
 
       let dateClass = "";
@@ -499,14 +503,16 @@
         </div>
 
         <div class="count">
-          ${assigned ? "1/1人" : "0/1人"}
+          ${assigned.length}人登録
         </div>
 
         ${
-          assigned
-            ? `<div class="staff-name">${assigned.staffName}</div>`
-            : ""
-        }
+  assigned.length > 0
+    ? assigned
+        .map(person => `<div class="staff-name">${person.staffName}</div>`)
+        .join("")
+    : ""
+}
 
         ${
           isSelected
@@ -529,27 +535,22 @@
 
   function handleDateTap(key) {
     const selectedStaffId = staffSelect.value;
-    const assigned = schedule[key];
+    const assigned = schedule[key] || [];
 
     if (!selectedStaffId) {
       showMessage("先に自分の名前を選択してください。", "error");
       return;
     }
 
-    if (assigned) {
-      if (assigned.staffId === selectedStaffId) {
-        selectedDates.clear();
-        selectedDates.add(key);
-        renderCalendar();
-        return;
-      }
+    const ownRegistration =
+  assigned.find(person => person.staffId === selectedStaffId);
 
-      showMessage(
-        `${assigned.staffName}さんが登録済みです。`,
-        "error"
-      );
-      return;
-    }
+if (ownRegistration) {
+  selectedDates.clear();
+  selectedDates.add(key);
+  renderCalendar();
+  return;
+}
 
     if (selectedDates.has(key)) {
       selectedDates.delete(key);
@@ -581,10 +582,9 @@
     }
 
     const ownRegistered =
-      dates.length === 1 &&
-      schedule[dates[0]] &&
-      schedule[dates[0]].staffId === selectedStaffId;
-
+  dates.length === 1 &&
+  (schedule[dates[0]] || [])
+    .some(person => person.staffId === selectedStaffId);
     if (ownRegistered) {
       selectedInfo.textContent =
         `${dates[0]} の登録を選択中`;
@@ -592,14 +592,17 @@
       registerBtn.disabled = true;
       cancelBtn.style.display = "block";
     } else {
-      const freeDates =
-        dates.filter(d => !schedule[d]);
+      const newDates =
+  dates.filter(d =>
+    !(schedule[d] || [])
+      .some(person => person.staffId === selectedStaffId)
+  );
 
-      selectedInfo.textContent =
-        `${freeDates.length}日選択中`;
+selectedInfo.textContent =
+  `${newDates.length}日選択中`;
 
-      registerBtn.disabled =
-        freeDates.length === 0;
+registerBtn.disabled =
+  newDates.length === 0;
 
       cancelBtn.style.display = "none";
     }
@@ -619,7 +622,10 @@
     }
 
     const dates =
-      [...selectedDates].filter(d => !schedule[d]);
+  [...selectedDates].filter(d =>
+    !(schedule[d] || [])
+      .some(person => person.staffId === staffId)
+  );
 
     if (dates.length === 0) return;
 
