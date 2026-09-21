@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>ヤンキース 夜勤希望 管理者</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f5f7fb;
+      color: #1f2937;
+    }
+    .app { max-width: 900px; margin: 0 auto; padding: 18px 12px 40px; }
+    .card {
+      background: #fff;
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 3px 16px rgba(0,0,0,.06);
+      margin-bottom: 14px;
+    }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    h2 { margin: 0 0 12px; font-size: 19px; }
+    .sub { color: #64748b; font-size: 14px; line-height: 1.5; }
+    .hidden { display: none !important; }
+    label { display: block; font-weight: 800; margin-bottom: 7px; }
+    select, input {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      background: #fff;
+      font-size: 16px;
+    }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 13px 15px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .45; cursor: default; }
+    .primary { background: #2563eb; color: #fff; }
+    .danger { background: #fee2e2; color: #b91c1c; }
+    .secondary { background: #eef2ff; color: #334155; }
+    .success { background: #dcfce7; color: #166534; }
+    .full { width: 100%; }
+    .top-row, .form-grid, .edit-grid {
+      display: grid;
+      gap: 10px;
+    }
+    .top-row { grid-template-columns: 1fr auto; align-items: center; }
+    .form-grid { grid-template-columns: 1fr auto; align-items: end; }
+    .edit-grid { grid-template-columns: 1fr 1fr; }
+    .month-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .month-title { font-size: 24px; font-weight: 900; text-align: center; flex: 1; }
+    .nav-btn {
+      width: 48px;
+      height: 48px;
+      padding: 0;
+      font-size: 25px;
+      background: #eef2ff;
+      color: #2563eb;
+    }
+    .weekdays, .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+    }
+    .weekday {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 800;
+      color: #64748b;
+      padding-bottom: 5px;
+    }
+    .weekday.sun { color: #ef4444; }
+    .weekday.sat { color: #3b82f6; }
+    .day {
+      min-height: 112px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #fff;
+      padding: 7px 5px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .day.empty { visibility: hidden; }
+    .day.past { opacity: .5; }
+    .day.selected { border: 2px solid #2563eb; background: #eff6ff; }
+    .day.has-registrations { background: #fff7ed; }
+    .date-num { font-size: 18px; font-weight: 900; margin-bottom: 4px; }
+    .sun-date, .holiday-date { color: #ef4444; }
+    .sat-date { color: #3b82f6; }
+    .count {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px;
+      border-radius: 7px;
+      margin-bottom: 5px;
+      background: #ecfdf5;
+      color: #15803d;
+    }
+    .has-registrations .count { background: #ffedd5; color: #c2410c; }
+    .staff-tag {
+      display: block;
+      width: 100%;
+      margin-top: 4px;
+      padding: 5px 3px;
+      border-radius: 7px;
+      background: #e0f2fe;
+      color: #0c4a6e;
+      font-size: 11px;
+      font-weight: 800;
+      text-align: center;
+      cursor: pointer;
+    }
+    .staff-tag:hover { outline: 2px solid #38bdf8; }
+    .selected-mark {
+      margin-top: 5px;
+      color: #2563eb;
+      font-size: 11px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .actions { margin-top: 12px; }
+    .selected-info { margin-bottom: 8px; text-align: center; font-weight: 800; color: #475569; }
+    .message {
+      display: none;
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .message.ok { display: block; background: #dcfce7; color: #166534; }
+    .message.error { display: block; background: #fee2e2; color: #991b1b; }
+    .login-wrap { max-width: 480px; margin: 70px auto 0; }
+    .login-note { font-size: 12px; color: #64748b; margin-top: 8px; }
+    .edit-original {
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 10px;
+      background: #f8fafc;
+      font-weight: 800;
+    }
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .small-link { color: #2563eb; text-decoration: none; font-weight: 700; font-size: 14px; }
+    @media (max-width: 600px) {
+      .app { padding-left: 6px; padding-right: 6px; }
+      .card { padding: 11px 7px; }
+      .calendar, .weekdays { gap: 3px; }
+      .day { min-height: 100px; padding: 5px 3px; }
+      .date-num { font-size: 16px; }
+      .form-grid, .edit-grid { grid-template-columns: 1fr; }
+      .top-row { grid-template-columns: 1fr; }
+      .top-row button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <div id="message" class="message"></div>
+
+  <div id="loginView" class="login-wrap">
+    <div class="card">
+      <h1>🔐 管理者ログイン</h1>
+      <div class="sub">ヤンキース 夜勤希望の管理者画面です。</div>
+      <div style="margin-top:16px;">
+        <label for="adminPassword">管理者パスワード</label>
+        <input id="adminPassword" type="password" autocomplete="current-password" placeholder="パスワードを入力">
+      </div>
+      <button id="loginBtn" class="primary full" style="margin-top:12px;">ログイン</button>
+      <div class="login-note">画面にはメールアドレスを表示せず、パスワードだけでログインします。</div>
+    </div>
+  </div>
+
+  <div id="adminView" class="hidden">
+    <div class="card">
+      <div class="top-row">
+        <div>
+          <h1>🌙 ヤンキース 夜勤希望 管理者</h1>
+          <div class="sub">全員の登録確認・追加・変更・取消ができます。同じ日に何人でも登録できます。</div>
+        </div>
+        <button id="logoutBtn" class="secondary">ログアウト</button>
+      </div>
+      <div style="margin-top:10px;">
+        <a class="small-link" href="./index.html">← 職員用画面へ</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>新しく登録する</h2>
+      <div class="form-grid">
+        <div>
+          <label for="staffSelect">職員名</label>
+          <select id="staffSelect">
+            <option value="">職員を選択してください</option>
+          </select>
+        </div>
+        <button id="registerBtn" class="primary" disabled>選択した日に登録</button>
+      </div>
+      <div id="selectedInfo" class="selected-info" style="margin-top:10px;">日付を選択してください</div>
+    </div>
+
+    <div class="card">
+      <div class="month-nav">
+        <button id="prevMonth" class="nav-btn">‹</button>
+        <div id="monthTitle" class="month-title"></div>
+        <button id="nextMonth" class="nav-btn">›</button>
+      </div>
+
+      <div class="weekdays">
+        <div class="weekday sun">日</div>
+        <div class="weekday">月</div>
+        <div class="weekday">火</div>
+        <div class="weekday">水</div>
+        <div class="weekday">木</div>
+        <div class="weekday">金</div>
+        <div class="weekday sat">土</div>
+      </div>
+      <div id="calendar" class="calendar"></div>
+    </div>
+
+    <div id="editCard" class="card hidden">
+      <h2>登録を変更・取り消す</h2>
+      <div id="editOriginal" class="edit-original"></div>
+      <div class="edit-grid">
+        <div>
+          <label for="editStaff">変更後の職員名</label>
+          <select id="editStaff"></select>
+        </div>
+        <div>
+          <label for="editDate">変更後の日付</label>
+          <input id="editDate" type="date">
+        </div>
+      </div>
+      <div class="button-row">
+        <button id="changeBtn" class="primary">変更する</button>
+        <button id="cancelRegistrationBtn" class="danger">この登録を取り消す</button>
+      </div>
+      <button id="closeEditBtn" class="secondary full" style="margin-top:10px;">閉じる</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://ujdexmngrwqixeirvoil.supabase.co";
+  const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqZGV4bW5ncndxaXhlaXJ2b2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5NzAzNzIsImV4cCI6MjEwNTU0NjM3Mn0.aMJo_dwqnVmGL72jUCG0vJ7G4Q72fpJOPRsmhwjeC4M";
+  const ADMIN_EMAIL = "admin@example.com";
+
+  const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let currentDate = new Date();
+  currentDate.setDate(1);
+  let staffs = [];
+  let schedule = {};
+  let holidays = {};
+  let selectedDates = new Set();
+  let selectedRegistration = null;
+
+  const loginView = document.getElementById("loginView");
+  const adminView = document.getElementById("adminView");
+  const adminPassword = document.getElementById("adminPassword");
+  const loginBtn = document.getElementById("loginBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const message = document.getElementById("message");
+  const staffSelect = document.getElementById("staffSelect");
+  const registerBtn = document.getElementById("registerBtn");
+  const selectedInfo = document.getElementById("selectedInfo");
+  const monthTitle = document.getElementById("monthTitle");
+  const calendar = document.getElementById("calendar");
+  const editCard = document.getElementById("editCard");
+  const editOriginal = document.getElementById("editOriginal");
+  const editStaff = document.getElementById("editStaff");
+  const editDate = document.getElementById("editDate");
+  const changeBtn = document.getElementById("changeBtn");
+  const cancelRegistrationBtn = document.getElementById("cancelRegistrationBtn");
+  const closeEditBtn = document.getElementById("closeEditBtn");
+
+  function dateKey(year, month, day) {
+    return year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+  }
+
+  function todayKey() {
+    const d = new Date();
+    return dateKey(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function showMessage(text, type) {
+    message.className = "message " + (type || "ok");
+    message.textContent = text;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setTimeout(function() {
+      message.className = "message";
+    }, 4500);
+  }
+
+  async function loadHolidays() {
+    try {
+      const response = await fetch("https://holidays-jp.github.io/api/v1/date.json", { cache: "no-store" });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      holidays = await response.json();
+    } catch (error) {
+      holidays = {};
+      console.warn("祝日データを取得できませんでした。", error);
+    }
+  }
+
+  async function loadStaffs() {
+    const result = await client.rpc("get_active_staffs");
+    if (result.error) {
+      showMessage("職員一覧を取得できませんでした：" + result.error.message, "error");
+      return;
+    }
+
+    staffs = result.data || [];
+    staffSelect.innerHTML = '<option value="">職員を選択してください</option>';
+    editStaff.innerHTML = "";
+
+    staffs.forEach(function(staff) {
+      const a = document.createElement("option");
+      a.value = staff.id;
+      a.textContent = staff.name;
+      staffSelect.appendChild(a);
+
+      const b = document.createElement("option");
+      b.value = staff.id;
+      b.textContent = staff.name;
+      editStaff.appendChild(b);
+    });
+  }
+
+  async function loadSchedule() {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const startDate = dateKey(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const endDate = dateKey(year, month, lastDay);
+
+    const result = await client.rpc("get_night_schedule", {
+      p_start_date: startDate,
+      p_end_date: endDate
+    });
+
+    if (result.error) {
+      showMessage("勤務状況を取得できませんでした：" + result.error.message, "error");
+      return;
+    }
+
+    schedule = {};
+    (result.data || []).forEach(function(row) {
+      if (!schedule[row.work_date]) schedule[row.work_date] = [];
+      schedule[row.work_date].push({
+        staffId: row.staff_id,
+        staffName: row.staff_name
+      });
+    });
+
+    Object.keys(schedule).forEach(function(key) {
+      schedule[key].sort(function(a, b) {
+        return a.staffName.localeCompare(b.staffName, "ja");
+      });
+    });
+
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    calendar.innerHTML = "";
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    monthTitle.textContent = year + "年 " + (month + 1) + "月";
+
+    const firstWeekday = new Date(year, month, 1).getDay();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+
+    for (let i = 0; i < firstWeekday; i++) {
+      const empty = document.createElement("div");
+      empty.className = "day empty";
+      calendar.appendChild(empty);
+    }
+
+    for (let day = 1; day <= lastDay; day++) {
+      const key = dateKey(year, month, day);
+      const weekday = new Date(year, month, day).getDay();
+      const assigned = schedule[key] || [];
+      const holidayName = holidays[key] || "";
+      const isPast = key < todayKey();
+      const isSelected = selectedDates.has(key);
+
+      const el = document.createElement("div");
+      el.className = "day";
+      if (isPast) el.classList.add("past");
+      if (assigned.length > 0) el.classList.add("has-registrations");
+      if (isSelected) el.classList.add("selected");
+      if (holidayName) el.title = holidayName;
+
+      let dateClass = "";
+      if (weekday === 0 || holidayName) {
+        dateClass = holidayName ? "holiday-date" : "sun-date";
+      } else if (weekday === 6) {
+        dateClass = "sat-date";
+      }
+
+      const dateNum = document.createElement("div");
+      dateNum.className = "date-num " + dateClass;
+      dateNum.textContent = day;
+      el.appendChild(dateNum);
+
+      const count = document.createElement("div");
+      count.className = "count";
+      count.textContent = assigned.length + "人登録";
+      el.appendChild(count);
+
+      assigned.forEach(function(person) {
+        const tag = document.createElement("button");
+        tag.type = "button";
+        tag.className = "staff-tag";
+        tag.textContent = person.staffName;
+        tag.addEventListener("click", function(event) {
+          event.stopPropagation();
+          openEdit(key, person);
+        });
+        el.appendChild(tag);
+      });
+
+      if (isSelected) {
+        const mark = document.createElement("div");
+        mark.className = "selected-mark";
+        mark.textContent = "✓ 選択中";
+        el.appendChild(mark);
+      }
+
+      if (!isPast) {
+        el.addEventListener("click", function() {
+          if (selectedDates.has(key)) {
+            selectedDates.delete(key);
+          } else {
+            selectedDates.add(key);
+          }
+          renderCalendar();
+        });
+      }
+
+      calendar.appendChild(el);
+    }
+
+    updateRegisterArea();
+  }
+
+  function updateRegisterArea() {
+    const staffId = staffSelect.value;
+    const dates = Array.from(selectedDates);
+
+    if (!staffId) {
+      selectedInfo.textContent = "先に職員名を選択してください";
+      registerBtn.disabled = true;
+      return;
+    }
+
+    if (dates.length === 0) {
+      selectedInfo.textContent = "日付を選択してください";
+      registerBtn.disabled = true;
+      return;
+    }
+
+    const newDates = dates.filter(function(d) {
+      return !(schedule[d] || []).some(function(person) {
+        return person.staffId === staffId;
+      });
+    });
+
+    selectedInfo.textContent = newDates.length + "日を新規登録";
+    registerBtn.disabled = newDates.length === 0;
+  }
+
+  function openEdit(workDate, person) {
+    selectedRegistration = {
+      workDate: workDate,
+      staffId: person.staffId,
+      staffName: person.staffName
+    };
+
+    editOriginal.textContent = workDate + "　" + person.staffName;
+    editStaff.value = person.staffId;
+    editDate.value = workDate;
+    editDate.min = todayKey();
+    editCard.classList.remove("hidden");
+    editCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function closeEdit() {
+    selectedRegistration = null;
+    editCard.classList.add("hidden");
+  }
+
+  async function registerOne(staffId, workDate) {
+    return await client.rpc("register_night", {
+      p_staff_id: staffId,
+      p_work_date: workDate
+    });
+  }
+
+  async function cancelOne(staffId, workDate) {
+    return await client.rpc("cancel_night", {
+      p_staff_id: staffId,
+      p_work_date: workDate
+    });
+  }
+
+  loginBtn.addEventListener("click", async function() {
+    const password = adminPassword.value;
+    if (!password) {
+      showMessage("管理者パスワードを入力してください。", "error");
+      return;
+    }
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = "確認中...";
+
+    const result = await client.auth.signInWithPassword({
+      email: ADMIN_EMAIL,
+      password: password
+    });
+
+    loginBtn.disabled = false;
+    loginBtn.textContent = "ログイン";
+
+    if (result.error) {
+      showMessage("パスワードが違います。", "error");
+      return;
+    }
+
+    adminPassword.value = "";
+    await enterAdmin();
+  });
+
+  adminPassword.addEventListener("keydown", function(event) {
+    if (event.key === "Enter") loginBtn.click();
+  });
+
+  logoutBtn.addEventListener("click", async function() {
+    await client.auth.signOut();
+    adminView.classList.add("hidden");
+    loginView.classList.remove("hidden");
+    selectedDates.clear();
+    closeEdit();
+  });
+
+  staffSelect.addEventListener("change", function() {
+    updateRegisterArea();
+  });
+
+  registerBtn.addEventListener("click", async function() {
+    const staffId = staffSelect.value;
+    if (!staffId) return;
+
+    const dates = Array.from(selectedDates).filter(function(d) {
+      return !(schedule[d] || []).some(function(person) {
+        return person.staffId === staffId;
+      });
+    });
+
+    if (dates.length === 0) return;
+
+    registerBtn.disabled = true;
+    registerBtn.textContent = "登録中...";
+
+    let success = 0;
+    let failed = 0;
+
+    for (const workDate of dates) {
+      const result = await registerOne(staffId, workDate);
+      if (result.error) failed++;
+      else success++;
+    }
+
+    selectedDates.clear();
+    await loadSchedule();
+
+    registerBtn.textContent = "選択した日に登録";
+    showMessage(
+      failed === 0
+        ? success + "日分を登録しました。"
+        : success + "日登録、" + failed + "日は登録できませんでした。",
+      failed === 0 ? "ok" : "error"
+    );
+  });
+
+  changeBtn.addEventListener("click", async function() {
+    if (!selectedRegistration) return;
+
+    const newStaffId = editStaff.value;
+    const newDate = editDate.value;
+
+    if (!newStaffId || !newDate) {
+      showMessage("変更後の職員名と日付を選択してください。", "error");
+      return;
+    }
+
+    if (newDate < todayKey()) {
+      showMessage("過去の日付への変更はできません。", "error");
+      return;
+    }
+
+    const oldStaffId = selectedRegistration.staffId;
+    const oldDate = selectedRegistration.workDate;
+
+    if (newStaffId === oldStaffId && newDate === oldDate) {
+      showMessage("変更内容がありません。", "error");
+      return;
+    }
+
+    const already = (schedule[newDate] || []).some(function(person) {
+      return person.staffId === newStaffId;
+    });
+
+    if (already) {
+      showMessage("変更先には、その職員がすでに登録されています。", "error");
+      return;
+    }
+
+    changeBtn.disabled = true;
+    changeBtn.textContent = "変更中...";
+
+    const addResult = await registerOne(newStaffId, newDate);
+
+    if (addResult.error) {
+      changeBtn.disabled = false;
+      changeBtn.textContent = "変更する";
+      showMessage("変更先へ登録できませんでした：" + addResult.error.message, "error");
+      return;
+    }
+
+    const removeResult = await cancelOne(oldStaffId, oldDate);
+
+    if (removeResult.error) {
+      await cancelOne(newStaffId, newDate);
+      changeBtn.disabled = false;
+      changeBtn.textContent = "変更する";
+      showMessage("元の登録を取り消せなかったため、変更を元に戻しました。", "error");
+      return;
+    }
+
+    changeBtn.disabled = false;
+    changeBtn.textContent = "変更する";
+    closeEdit();
+    await loadSchedule();
+    showMessage("登録を変更しました。");
+  });
+
+  cancelRegistrationBtn.addEventListener("click", async function() {
+    if (!selectedRegistration) return;
+
+    const ok = confirm(
+      selectedRegistration.workDate + " の " + selectedRegistration.staffName + " さんの登録を取り消しますか？"
+    );
+    if (!ok) return;
+
+    cancelRegistrationBtn.disabled = true;
+    cancelRegistrationBtn.textContent = "取消中...";
+
+    const result = await cancelOne(
+      selectedRegistration.staffId,
+      selectedRegistration.workDate
+    );
+
+    cancelRegistrationBtn.disabled = false;
+    cancelRegistrationBtn.textContent = "この登録を取り消す";
+
+    if (result.error) {
+      showMessage("取り消せませんでした：" + result.error.message, "error");
+      return;
+    }
+
+    closeEdit();
+    await loadSchedule();
+    showMessage("登録を取り消しました。");
+  });
+
+  closeEditBtn.addEventListener("click", closeEdit);
+
+  document.getElementById("prevMonth").addEventListener("click", async function() {
+    currentDate.setMonth(currentDate.getMonth() - 1);
+    selectedDates.clear();
+    closeEdit();
+    await loadSchedule();
+  });
+
+  document.getElementById("nextMonth").addEventListener("click", async function() {
+    currentDate.setMonth(currentDate.getMonth() + 1);
+    selectedDates.clear();
+    closeEdit();
+    await loadSchedule();
+  });
+
+  async function enterAdmin() {
+    loginView.classList.add("hidden");
+    adminView.classList.remove("hidden");
+    await loadHolidays();
+    await loadStaffs();
+    await loadSchedule();
+  }
+
+  async function start() {
+    const result = await client.auth.getSession();
+    const session = result.data.session;
+
+    if (session && session.user && session.user.email === ADMIN_EMAIL) {
+      await enterAdmin();
+    } else {
+      if (session) await client.auth.signOut();
+      loginView.classList.remove("hidden");
+      adminView.classList.add("hidden");
+    }
+  }
+
+  start();
+</script>
+</body>
+</html>
