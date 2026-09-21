@@ -131,7 +131,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $
+as $func$
 declare
   v_name text;
 begin
@@ -158,7 +158,7 @@ begin
     'name', v_name
   );
 end;
-$;
+$func$;
 
 create or replace function public.admin_set_staff_active(
   p_staff_id uuid,
