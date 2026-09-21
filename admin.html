@@ -156,6 +156,22 @@
     }
     .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
     .small-link { color: #2563eb; text-decoration: none; font-weight: 700; font-size: 14px; }
+    .staff-manage-list { display: grid; gap: 8px; margin-top: 12px; }
+    .staff-manage-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #f8fafc;
+    }
+    .staff-manage-row.inactive { opacity: .62; }
+    .staff-manage-info { flex: 1; min-width: 0; }
+    .staff-manage-name { font-weight: 900; word-break: break-all; }
+    .staff-manage-status { margin-top: 3px; font-size: 12px; color: #64748b; font-weight: 700; }
+    .staff-manage-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .small-btn { padding: 9px 11px; font-size: 13px; }
     @media (max-width: 600px) {
       .app { padding-left: 6px; padding-right: 6px; }
       .card { padding: 11px 7px; }
@@ -165,6 +181,9 @@
       .form-grid, .edit-grid { grid-template-columns: 1fr; }
       .top-row { grid-template-columns: 1fr; }
       .top-row button { width: 100%; }
+      .staff-manage-row { align-items: flex-start; flex-direction: column; }
+      .staff-manage-actions { width: 100%; }
+      .staff-manage-actions button { flex: 1; }
     }
   </style>
 </head>
@@ -198,6 +217,19 @@
       <div style="margin-top:10px;">
         <a class="small-link" href="./index.html">← 職員用画面へ</a>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>職員管理</h2>
+      <div class="sub">新しい職員の追加、名前変更、退職者などの非表示ができます。非表示にしても過去の夜勤記録は消えません。</div>
+      <div class="form-grid" style="margin-top:12px;">
+        <div>
+          <label for="newStaffName">新しい職員名</label>
+          <input id="newStaffName" type="text" maxlength="50" placeholder="例：山田">
+        </div>
+        <button id="addStaffBtn" class="success">職員を追加</button>
+      </div>
+      <div id="staffManageList" class="staff-manage-list"></div>
     </div>
 
     <div class="card">
@@ -270,6 +302,7 @@
   let holidays = {};
   let selectedDates = new Set();
   let selectedRegistration = null;
+  let managedStaffs = [];
 
   const loginView = document.getElementById("loginView");
   const adminView = document.getElementById("adminView");
@@ -289,6 +322,9 @@
   const changeBtn = document.getElementById("changeBtn");
   const cancelRegistrationBtn = document.getElementById("cancelRegistrationBtn");
   const closeEditBtn = document.getElementById("closeEditBtn");
+  const newStaffName = document.getElementById("newStaffName");
+  const addStaffBtn = document.getElementById("addStaffBtn");
+  const staffManageList = document.getElementById("staffManageList");
 
   function dateKey(year, month, day) {
     return year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
@@ -341,6 +377,123 @@
       b.textContent = staff.name;
       editStaff.appendChild(b);
     });
+  }
+
+  async function loadManagedStaffs() {
+    const result = await client.rpc("admin_list_staffs");
+
+    if (result.error) {
+      staffManageList.innerHTML = "";
+      showMessage(
+        "職員管理の準備がまだ完了していません：" + result.error.message,
+        "error"
+      );
+      return;
+    }
+
+    managedStaffs = result.data || [];
+    renderManagedStaffs();
+  }
+
+  function renderManagedStaffs() {
+    staffManageList.innerHTML = "";
+
+    if (managedStaffs.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "sub";
+      empty.textContent = "登録されている職員はいません。";
+      staffManageList.appendChild(empty);
+      return;
+    }
+
+    managedStaffs.forEach(function(staff) {
+      const row = document.createElement("div");
+      row.className = "staff-manage-row" + (staff.active ? "" : " inactive");
+
+      const info = document.createElement("div");
+      info.className = "staff-manage-info";
+
+      const name = document.createElement("div");
+      name.className = "staff-manage-name";
+      name.textContent = staff.name;
+
+      const status = document.createElement("div");
+      status.className = "staff-manage-status";
+      status.textContent = staff.active ? "表示中" : "非表示";
+
+      info.appendChild(name);
+      info.appendChild(status);
+
+      const actions = document.createElement("div");
+      actions.className = "staff-manage-actions";
+
+      const renameBtn = document.createElement("button");
+      renameBtn.type = "button";
+      renameBtn.className = "secondary small-btn";
+      renameBtn.textContent = "名前変更";
+      renameBtn.addEventListener("click", async function() {
+        const nextName = prompt("新しい名前を入力してください。", staff.name);
+        if (nextName === null) return;
+
+        const trimmed = nextName.trim();
+        if (!trimmed) {
+          showMessage("名前を入力してください。", "error");
+          return;
+        }
+
+        const result = await client.rpc("admin_rename_staff", {
+          p_staff_id: staff.id,
+          p_name: trimmed
+        });
+
+        if (result.error) {
+          showMessage("名前を変更できませんでした：" + result.error.message, "error");
+          return;
+        }
+
+        await refreshStaffManagement();
+        showMessage("職員名を変更しました。");
+      });
+
+      const activeBtn = document.createElement("button");
+      activeBtn.type = "button";
+      activeBtn.className = (staff.active ? "danger" : "success") + " small-btn";
+      activeBtn.textContent = staff.active ? "非表示にする" : "再表示する";
+      activeBtn.addEventListener("click", async function() {
+        const nextActive = !staff.active;
+        const ok = confirm(
+          staff.name + " さんを" +
+          (nextActive ? "職員一覧に再表示しますか？" : "職員一覧から非表示にしますか？")
+        );
+        if (!ok) return;
+
+        const result = await client.rpc("admin_set_staff_active", {
+          p_staff_id: staff.id,
+          p_active: nextActive
+        });
+
+        if (result.error) {
+          showMessage("変更できませんでした：" + result.error.message, "error");
+          return;
+        }
+
+        await refreshStaffManagement();
+        showMessage(nextActive ? "職員を再表示しました。" : "職員を非表示にしました。");
+      });
+
+      actions.appendChild(renameBtn);
+      actions.appendChild(activeBtn);
+
+      row.appendChild(info);
+      row.appendChild(actions);
+      staffManageList.appendChild(row);
+    });
+  }
+
+  async function refreshStaffManagement() {
+    await loadStaffs();
+    await loadManagedStaffs();
+    await loadSchedule();
   }
 
   async function loadSchedule() {
@@ -560,6 +713,38 @@
     closeEdit();
   });
 
+  addStaffBtn.addEventListener("click", async function() {
+    const name = newStaffName.value.trim();
+
+    if (!name) {
+      showMessage("追加する職員名を入力してください。", "error");
+      return;
+    }
+
+    addStaffBtn.disabled = true;
+    addStaffBtn.textContent = "追加中...";
+
+    const result = await client.rpc("admin_add_staff", {
+      p_name: name
+    });
+
+    addStaffBtn.disabled = false;
+    addStaffBtn.textContent = "職員を追加";
+
+    if (result.error) {
+      showMessage("職員を追加できませんでした：" + result.error.message, "error");
+      return;
+    }
+
+    newStaffName.value = "";
+    await refreshStaffManagement();
+    showMessage(name + " さんを追加しました。");
+  });
+
+  newStaffName.addEventListener("keydown", function(event) {
+    if (event.key === "Enter") addStaffBtn.click();
+  });
+
   staffSelect.addEventListener("change", function() {
     updateRegisterArea();
   });
@@ -712,6 +897,7 @@
     adminView.classList.remove("hidden");
     await loadHolidays();
     await loadStaffs();
+    await loadManagedStaffs();
     await loadSchedule();
   }
 
