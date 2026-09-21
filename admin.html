@@ -172,6 +172,30 @@
     .staff-manage-status { margin-top: 3px; font-size: 12px; color: #64748b; font-weight: 700; }
     .staff-manage-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
     .small-btn { padding: 9px 11px; font-size: 13px; }
+    .count-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .count-summary-item {
+      padding: 10px;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      text-align: center;
+    }
+    .count-summary-name {
+      font-size: 14px;
+      font-weight: 800;
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+    .count-summary-days {
+      font-size: 20px;
+      font-weight: 900;
+      color: #2563eb;
+    }
     @media (max-width: 600px) {
       .app { padding-left: 6px; padding-right: 6px; }
       .card { padding: 11px 7px; }
@@ -244,6 +268,11 @@
         <button id="registerBtn" class="primary" disabled>選択した日に登録</button>
       </div>
       <div id="selectedInfo" class="selected-info" style="margin-top:10px;">日付を選択してください</div>
+    </div>
+
+    <div class="card">
+      <h2 id="countSummaryTitle">今月の登録日数</h2>
+      <div id="countSummary" class="count-summary"></div>
     </div>
 
     <div class="card">
@@ -325,6 +354,8 @@
   const newStaffName = document.getElementById("newStaffName");
   const addStaffBtn = document.getElementById("addStaffBtn");
   const staffManageList = document.getElementById("staffManageList");
+  const countSummaryTitle = document.getElementById("countSummaryTitle");
+  const countSummary = document.getElementById("countSummary");
 
   function dateKey(year, month, day) {
     return year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
@@ -531,7 +562,54 @@
       });
     });
 
+    renderCountSummary();
     renderCalendar();
+  }
+
+  function renderCountSummary() {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    countSummaryTitle.textContent =
+      year + "年 " + (month + 1) + "月の登録日数";
+
+    const counts = {};
+
+    Object.values(schedule).forEach(function(dayEntries) {
+      dayEntries.forEach(function(person) {
+        counts[person.staffId] = (counts[person.staffId] || 0) + 1;
+      });
+    });
+
+    countSummary.innerHTML = "";
+
+    const activeStaffs = managedStaffs.filter(function(staff) {
+      return staff.active;
+    });
+
+    activeStaffs.forEach(function(staff) {
+      const item = document.createElement("div");
+      item.className = "count-summary-item";
+
+      const name = document.createElement("div");
+      name.className = "count-summary-name";
+      name.textContent = staff.name;
+
+      const days = document.createElement("div");
+      days.className = "count-summary-days";
+      days.textContent = (counts[staff.id] || 0) + "日";
+
+      item.appendChild(name);
+      item.appendChild(days);
+      countSummary.appendChild(item);
+    });
+
+    if (activeStaffs.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "sub";
+      empty.textContent = "表示できる職員がいません。";
+      countSummary.appendChild(empty);
+    }
   }
 
   function renderCalendar() {
