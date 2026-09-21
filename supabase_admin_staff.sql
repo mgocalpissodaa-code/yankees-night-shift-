@@ -124,6 +124,42 @@ exception
 end;
 $$;
 
+create or replace function public.admin_delete_staff(
+  p_staff_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  v_name text;
+begin
+  if coalesce(auth.jwt() ->> 'email', '') <> 'admin@example.com' then
+    raise exception '管理者としてログインしてください。';
+  end if;
+
+  select s.name into v_name
+  from public.staffs s
+  where s.id = p_staff_id;
+
+  if v_name is null then
+    raise exception '対象の職員が見つかりません。';
+  end if;
+
+  delete from public.night_availability
+  where staff_id = p_staff_id;
+
+  delete from public.staffs
+  where id = p_staff_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'name', v_name
+  );
+end;
+$;
+
 create or replace function public.admin_set_staff_active(
   p_staff_id uuid,
   p_active boolean
@@ -153,9 +189,11 @@ $$;
 revoke all on function public.admin_list_staffs() from public;
 revoke all on function public.admin_add_staff(text) from public;
 revoke all on function public.admin_rename_staff(uuid, text) from public;
+revoke all on function public.admin_delete_staff(uuid) from public;
 revoke all on function public.admin_set_staff_active(uuid, boolean) from public;
 
 grant execute on function public.admin_list_staffs() to authenticated;
 grant execute on function public.admin_add_staff(text) to authenticated;
 grant execute on function public.admin_rename_staff(uuid, text) to authenticated;
+grant execute on function public.admin_delete_staff(uuid) to authenticated;
 grant execute on function public.admin_set_staff_active(uuid, boolean) to authenticated;
