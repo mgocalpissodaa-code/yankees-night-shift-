@@ -32,10 +32,15 @@
     .day.empty{visibility:hidden}.day.past{opacity:.45}.day.selected{border:2px solid #2563eb;background:#eff6ff}.day.has{background:#fffaf5}
     .date-num{font-size:17px;font-weight:900;margin-bottom:4px}.sun-date,.holiday-date{color:#ef4444}.sat-date{color:#3b82f6}
     .count{font-size:10px;text-align:center;font-weight:800;background:#f1f5f9;color:#475569;border-radius:7px;padding:3px;margin-bottom:3px}
-    .tag{display:block;width:100%;margin:3px 0 0;padding:4px 3px;border-radius:7px;color:#fff;font-size:10px;font-weight:800;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    .tag{display:block;width:100%;margin:3px 0 0;padding:5px 3px;border-radius:7px;color:#fff;overflow:hidden;line-height:1.15}
+    .tag-staff{font-size:10px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .tag-type{margin-top:2px;font-size:9px;font-weight:800;white-space:normal;overflow-wrap:anywhere}
     .selected-mark{text-align:center;margin-top:4px;font-size:10px;font-weight:800;color:#2563eb}
     .register-actions{margin-top:10px}.selected-info{text-align:center;color:#475569;font-size:13px;font-weight:800;margin-bottom:8px}
-    .legend{display:flex;gap:7px;flex-wrap:wrap}.legend-item{font-size:12px;font-weight:800;border:1px solid #e2e8f0;border-radius:999px;padding:5px 8px}
+    .legend{display:block}.legend-group{margin-top:10px}.legend-group:first-child{margin-top:0}
+    .legend-title{font-size:13px;font-weight:900;color:#334155;margin-bottom:6px}
+    .legend-items{display:flex;gap:7px;flex-wrap:wrap}
+    .legend-item{font-size:12px;font-weight:800;border:1px solid #e2e8f0;border-radius:999px;padding:5px 8px}
     .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px}
     .summary-item{background:#f8fafc;border-radius:10px;padding:9px}.summary-name{font-weight:800;font-size:13px}.summary-count{font-size:20px;font-weight:900;margin-top:2px}
     .matrix-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:10px}
@@ -43,7 +48,7 @@
     th{background:#f8fafc;position:sticky;top:0;z-index:2}.sticky-col{position:sticky;left:0;background:#fff;z-index:1;min-width:78px;font-weight:800}
     th.sticky-col{background:#f8fafc;z-index:3}.cell-symbol{font-weight:900}.cell-note{font-size:9px;color:#64748b;max-width:80px;overflow:hidden;text-overflow:ellipsis}
     .edit-original{padding:10px;background:#f8fafc;border-radius:10px;margin-bottom:10px;font-weight:800}
-    @media(max-width:600px){.app{padding-left:6px;padding-right:6px}.card{padding:11px 8px}.grid2,.grid3{grid-template-columns:1fr}.calendar,.weekdays{gap:3px}.day{min-height:104px;padding:4px 2px}.tag,.count{font-size:9px}}
+    @media(max-width:600px){.app{padding-left:6px;padding-right:6px}.card{padding:11px 8px}.grid2,.grid3{grid-template-columns:1fr}.calendar,.weekdays{gap:3px}.day{min-height:112px;padding:4px 2px}.count{font-size:9px}.tag-staff{font-size:9px}.tag-type{font-size:8px}}
   </style>
 </head>
 <body>
@@ -175,13 +180,33 @@ function fillStaffSelect(el,placeholder){
   el.innerHTML=placeholder?'<option value="">職員を選択してください</option>':"";
   staffs.forEach(s=>{const o=document.createElement("option");o.value=s.id;o.textContent=s.name;el.appendChild(o)})
 }
+function isWorkTimeType(t){return Number(t.sort_order)>=100&&Number(t.sort_order)<900}
 function fillTypeSelect(el,placeholder){
   el.innerHTML=placeholder?'<option value="">希望内容を選択してください</option>':"";
-  requestTypes.forEach(t=>{const o=document.createElement("option");o.value=t.id;o.textContent=`${t.symbol}　${t.name}`;el.appendChild(o)})
+  const reqGroup=document.createElement("optgroup");reqGroup.label="休み・希望";
+  const timeGroup=document.createElement("optgroup");timeGroup.label="勤務できる時間";
+  requestTypes.forEach(t=>{
+    const o=document.createElement("option");o.value=t.id;o.textContent=t.name;
+    (isWorkTimeType(t)?timeGroup:reqGroup).appendChild(o)
+  });
+  el.append(reqGroup,timeGroup)
 }
 function renderLegend(){
-  $("legend").innerHTML="";
-  requestTypes.forEach(t=>{const d=document.createElement("div");d.className="legend-item";d.innerHTML=`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${esc(t.color)};margin-right:4px"></span>${esc(t.symbol)} ${esc(t.name)}`;$("legend").appendChild(d)})
+  const box=$("legend");box.innerHTML="";
+  [
+    {title:"休み・希望",items:requestTypes.filter(t=>!isWorkTimeType(t))},
+    {title:"勤務できる時間",items:requestTypes.filter(isWorkTimeType)}
+  ].forEach(group=>{
+    const wrap=document.createElement("div");wrap.className="legend-group";
+    const title=document.createElement("div");title.className="legend-title";title.textContent=group.title;
+    const items=document.createElement("div");items.className="legend-items";
+    group.items.forEach(t=>{
+      const d=document.createElement("div");d.className="legend-item";
+      d.innerHTML=`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${esc(t.color)};margin-right:4px"></span>${esc(t.name)}`;
+      items.appendChild(d)
+    });
+    wrap.append(title,items);box.appendChild(wrap)
+  })
 }
 async function loadManagedStaffs(){
   const r=await client.rpc("central_admin_list_staffs");
@@ -221,7 +246,7 @@ function renderCalendar(){
     const el=document.createElement("div");el.className="day";if(past)el.classList.add("past");if(entries.length)el.classList.add("has");if(sel)el.classList.add("selected");if(holiday)el.title=holiday;
     let dc="";if(weekday===0||holiday)dc=holiday?"holiday-date":"sun-date";else if(weekday===6)dc="sat-date";
     el.innerHTML=`<div class="date-num ${dc}">${d}</div><div class="count">${entries.length}件</div>`;
-    entries.forEach(x=>{const b=document.createElement("button");b.className="tag";b.style.background=x.color||"#64748b";b.textContent=`${x.staffName} ${x.symbol}`;b.title=x.note?`${x.typeName}：${x.note}`:x.typeName;b.onclick=e=>{e.stopPropagation();openEdit(key,x)};el.appendChild(b)});
+    entries.forEach(x=>{const b=document.createElement("button");b.className="tag";b.style.background=x.color||"#64748b";b.innerHTML=`<div class="tag-staff">${esc(x.staffName)}</div><div class="tag-type">${esc(x.typeName)}</div>`;b.title=x.note?`${x.typeName}：${x.note}`:x.typeName;b.onclick=e=>{e.stopPropagation();openEdit(key,x)};el.appendChild(b)});
     if(sel){const mark=document.createElement("div");mark.className="selected-mark";mark.textContent="✓ 選択中";el.appendChild(mark)}
     if(!past)el.onclick=()=>{selectedDates.has(key)?selectedDates.delete(key):selectedDates.add(key);renderCalendar()};
     calendar.appendChild(el)
