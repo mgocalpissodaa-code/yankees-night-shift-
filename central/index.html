@@ -26,12 +26,12 @@
       border-radius: 12px; background: #fff;
     }
     .field + .field { margin-top: 13px; }
-    .legend { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
-    .legend-item {
-      display:flex; align-items:center; gap:5px; font-size:12px; font-weight:700;
-      background:#f8fafc; border:1px solid #e2e8f0; border-radius:999px; padding:5px 8px;
+    .request-section {
+      margin-top:10px; padding:12px; border:1px solid #e2e8f0; border-radius:14px; background:#f8fafc;
     }
-    .legend-dot { width:10px; height:10px; border-radius:50%; }
+    .request-section:first-of-type { margin-top:0; }
+    .request-section-title { font-size:14px; font-weight:900; margin-bottom:7px; color:#334155; }
+    .request-section-hint { font-size:12px; color:#64748b; margin-top:6px; line-height:1.45; }
     .message { display:none; padding:12px; margin-bottom:12px; border-radius:12px; font-size:14px; font-weight:800; }
     .message.ok { display:block; background:#dcfce7; color:#166534; }
     .message.error { display:block; background:#fee2e2; color:#991b1b; }
@@ -59,10 +59,12 @@
       background:#f1f5f9; color:#475569; border-radius:7px;
     }
     .req-tag {
-      margin-top:4px; border-radius:7px; padding:4px 3px; font-size:10px; font-weight:800;
-      text-align:center; color:#fff; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+      margin-top:4px; border-radius:7px; padding:5px 3px; color:#fff;
+      text-align:center; overflow:hidden; line-height:1.15;
     }
     .req-tag.own { outline:2px solid #111827; outline-offset:1px; }
+    .req-staff { font-size:10px; font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .req-type { margin-top:2px; font-size:9px; font-weight:800; white-space:normal; overflow-wrap:anywhere; }
     .selected-mark { margin-top:5px; font-size:11px; color:#2563eb; font-weight:900; text-align:center; }
     .actions {
       position:sticky; bottom:10px; z-index:20; background:rgba(255,255,255,.97);
@@ -82,7 +84,9 @@
       .calendar,.weekdays { gap:3px; }
       .day { min-height:102px; padding:5px 3px; }
       .date-num { font-size:17px; }
-      .req-tag,.count { font-size:9px; }
+      .count { font-size:9px; }
+      .req-staff { font-size:9px; }
+      .req-type { font-size:8px; }
     }
   </style>
 </head>
@@ -104,9 +108,22 @@
       <select id="staffSelect"><option value="">名前を選択してください</option></select>
     </div>
     <div class="field">
-      <label for="requestSelect">希望内容</label>
-      <select id="requestSelect"><option value="">希望内容を選択してください</option></select>
-      <div id="legend" class="legend"></div>
+      <label>希望内容</label>
+      <div class="request-section">
+        <div class="request-section-title">休み・希望</div>
+        <select id="requestSelect">
+          <option value="">休み・希望を選択してください</option>
+        </select>
+        <div class="request-section-hint">休み希望・有給・早出希望・遅出希望など</div>
+      </div>
+      <div class="request-section">
+        <div class="request-section-title">勤務できる時間</div>
+        <select id="workTimeSelect">
+          <option value="">勤務時間を選択してください</option>
+        </select>
+        <div class="request-section-hint">勤務できる時間を登録するときはこちら</div>
+      </div>
+      <div class="help">どちらか1つを選択してください。片方を選ぶと、もう片方は自動で解除されます。</div>
     </div>
     <div class="field">
       <label for="noteInput">メモ（必要なときだけ）</label>
@@ -150,6 +167,7 @@ let selectedDates = new Set();
 
 const staffSelect = document.getElementById("staffSelect");
 const requestSelect = document.getElementById("requestSelect");
+const workTimeSelect = document.getElementById("workTimeSelect");
 const noteInput = document.getElementById("noteInput");
 const calendar = document.getElementById("calendar");
 const monthTitle = document.getElementById("monthTitle");
@@ -157,7 +175,6 @@ const selectedInfo = document.getElementById("selectedInfo");
 const registerBtn = document.getElementById("registerBtn");
 const cancelBtn = document.getElementById("cancelBtn");
 const message = document.getElementById("message");
-const legend = document.getElementById("legend");
 
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -204,17 +221,19 @@ async function loadMaster() {
     staffSelect.appendChild(o);
   });
 
-  requestSelect.innerHTML = '<option value="">希望内容を選択してください</option>';
-  legend.innerHTML = "";
+  requestSelect.innerHTML = '<option value="">休み・希望を選択してください</option>';
+  workTimeSelect.innerHTML = '<option value="">勤務時間を選択してください</option>';
+
   requestTypes.forEach(t => {
     const o = document.createElement("option");
-    o.value = t.id; o.textContent = `${t.symbol}　${t.name}`;
-    requestSelect.appendChild(o);
+    o.value = t.id;
+    o.textContent = t.name;
 
-    const item = document.createElement("div");
-    item.className = "legend-item";
-    item.innerHTML = `<span class="legend-dot" style="background:${esc(t.color)}"></span>${esc(t.symbol)} ${esc(t.name)}`;
-    legend.appendChild(item);
+    if (isWorkTimeType(t)) {
+      workTimeSelect.appendChild(o);
+    } else {
+      requestSelect.appendChild(o);
+    }
   });
   return true;
 }
@@ -237,6 +256,12 @@ async function loadSchedule() {
     });
   });
   renderCalendar();
+}
+function isWorkTimeType(t) {
+  return Number(t.sort_order) >= 100 && Number(t.sort_order) < 900;
+}
+function getSelectedTypeId() {
+  return workTimeSelect.value || requestSelect.value;
 }
 function renderCalendar() {
   calendar.innerHTML = "";
@@ -269,7 +294,7 @@ function renderCalendar() {
       tag.className="req-tag" + (own ? " own" : "");
       tag.style.background=x.color || "#64748b";
       tag.title = x.note ? `${x.staffName}：${x.typeName}（${x.note}）` : `${x.staffName}：${x.typeName}`;
-      tag.textContent = `${x.staffName} ${x.symbol}`;
+      tag.innerHTML = `<div class="req-staff">${esc(x.staffName)}</div><div class="req-type">${esc(x.typeName)}</div>`;
       el.appendChild(tag);
     });
     if (isSelected) {
@@ -285,7 +310,7 @@ function renderCalendar() {
   updateActions();
 }
 function updateActions() {
-  const staffId=staffSelect.value, typeId=requestSelect.value, dates=[...selectedDates];
+  const staffId=staffSelect.value, typeId=getSelectedTypeId(), dates=[...selectedDates];
   if (!staffId || !typeId) {
     selectedInfo.textContent="先に名前と希望内容を選択してください";
     registerBtn.disabled=true; cancelBtn.style.display="none"; return;
@@ -302,10 +327,17 @@ function updateActions() {
   cancelBtn.textContent=`選択した自分の登録を取り消す（${ownDates.length}日）`;
 }
 staffSelect.addEventListener("change", () => { selectedDates.clear(); renderCalendar(); });
-requestSelect.addEventListener("change", updateActions);
+requestSelect.addEventListener("change", () => {
+  if (requestSelect.value) workTimeSelect.value = "";
+  updateActions();
+});
+workTimeSelect.addEventListener("change", () => {
+  if (workTimeSelect.value) requestSelect.value = "";
+  updateActions();
+});
 
 registerBtn.addEventListener("click", async () => {
-  const staffId=staffSelect.value, typeId=requestSelect.value, dates=[...selectedDates];
+  const staffId=staffSelect.value, typeId=getSelectedTypeId(), dates=[...selectedDates];
   if (!staffId || !typeId || !dates.length) return;
   registerBtn.disabled=true; registerBtn.textContent="登録中...";
   let ok=0, ng=0;
