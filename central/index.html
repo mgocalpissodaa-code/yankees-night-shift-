@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>セントラル シフト希望</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+      background: #f5f7fb;
+      color: #1f2937;
+    }
+    .app { max-width: 780px; margin: 0 auto; padding: 18px 12px 46px; }
+    .card {
+      background: #fff; border-radius: 18px; padding: 16px; margin-bottom: 14px;
+      box-shadow: 0 3px 16px rgba(0,0,0,.06);
+    }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    .sub { color: #64748b; font-size: 14px; line-height: 1.55; }
+    label { display: block; font-weight: 800; margin: 0 0 7px; }
+    select, input {
+      width: 100%; padding: 14px; font-size: 16px; border: 1px solid #cbd5e1;
+      border-radius: 12px; background: #fff;
+    }
+    .field + .field { margin-top: 13px; }
+    .legend { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+    .legend-item {
+      display:flex; align-items:center; gap:5px; font-size:12px; font-weight:700;
+      background:#f8fafc; border:1px solid #e2e8f0; border-radius:999px; padding:5px 8px;
+    }
+    .legend-dot { width:10px; height:10px; border-radius:50%; }
+    .message { display:none; padding:12px; margin-bottom:12px; border-radius:12px; font-size:14px; font-weight:800; }
+    .message.ok { display:block; background:#dcfce7; color:#166534; }
+    .message.error { display:block; background:#fee2e2; color:#991b1b; }
+    .month-nav { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:14px; }
+    .month-title { font-size:24px; font-weight:900; text-align:center; flex:1; }
+    .nav-btn {
+      width:48px; height:48px; border:0; border-radius:12px; background:#eef2ff; color:#2563eb;
+      font-size:25px; font-weight:900;
+    }
+    .weekdays, .calendar { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+    .weekday { text-align:center; font-size:13px; font-weight:800; color:#64748b; padding-bottom:5px; }
+    .weekday.sun { color:#ef4444; } .weekday.sat { color:#3b82f6; }
+    .day {
+      min-height:112px; border:1px solid #e2e8f0; border-radius:12px; background:#fff;
+      padding:7px 5px; overflow:hidden; cursor:pointer; -webkit-tap-highlight-color:transparent;
+    }
+    .day.empty { visibility:hidden; }
+    .day.past { opacity:.42; cursor:default; }
+    .day.selected { border:2px solid #2563eb; background:#eff6ff; }
+    .day.has-requests { background:#fffaf5; }
+    .date-num { font-size:18px; font-weight:900; margin-bottom:5px; }
+    .sun-date,.holiday-date { color:#ef4444; } .sat-date { color:#3b82f6; }
+    .count {
+      font-size:11px; font-weight:800; text-align:center; padding:4px 2px; margin-bottom:4px;
+      background:#f1f5f9; color:#475569; border-radius:7px;
+    }
+    .req-tag {
+      margin-top:4px; border-radius:7px; padding:4px 3px; font-size:10px; font-weight:800;
+      text-align:center; color:#fff; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+    }
+    .req-tag.own { outline:2px solid #111827; outline-offset:1px; }
+    .selected-mark { margin-top:5px; font-size:11px; color:#2563eb; font-weight:900; text-align:center; }
+    .actions {
+      position:sticky; bottom:10px; z-index:20; background:rgba(255,255,255,.97);
+      border-radius:18px; padding:12px; box-shadow:0 4px 25px rgba(0,0,0,.14); margin-top:14px;
+    }
+    .selected-info { text-align:center; font-size:14px; font-weight:800; color:#475569; margin-bottom:9px; }
+    .primary,.danger {
+      width:100%; border:0; border-radius:13px; padding:15px; font-size:16px; font-weight:900;
+    }
+    .primary { background:#2563eb; color:#fff; }
+    .danger { margin-top:8px; background:#fee2e2; color:#b91c1c; }
+    button:disabled { opacity:.42; }
+    .help { margin-top:8px; font-size:12px; color:#64748b; line-height:1.5; }
+    @media (max-width:480px) {
+      .app { padding-left:6px; padding-right:6px; }
+      .card { padding:11px 7px; }
+      .calendar,.weekdays { gap:3px; }
+      .day { min-height:102px; padding:5px 3px; }
+      .date-num { font-size:17px; }
+      .req-tag,.count { font-size:9px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="card">
+    <h1>📅 セントラル シフト希望</h1>
+    <div class="sub">
+      自分の名前と希望内容を選び、日付を複数選択してまとめて登録できます。<br>
+      登録済みの日にもう一度登録すると、希望内容を変更できます。
+    </div>
+  </div>
+
+  <div id="message" class="message"></div>
+
+  <div class="card">
+    <div class="field">
+      <label for="staffSelect">あなたの名前</label>
+      <select id="staffSelect"><option value="">名前を選択してください</option></select>
+    </div>
+    <div class="field">
+      <label for="requestSelect">希望内容</label>
+      <select id="requestSelect"><option value="">希望内容を選択してください</option></select>
+      <div id="legend" class="legend"></div>
+    </div>
+    <div class="field">
+      <label for="noteInput">メモ（必要なときだけ）</label>
+      <input id="noteInput" maxlength="80" placeholder="例：A棟以外、午前のみ など">
+      <div class="help">同じメモを、選択した日すべてに登録します。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="month-nav">
+      <button class="nav-btn" id="prevMonth">‹</button>
+      <div class="month-title" id="monthTitle"></div>
+      <button class="nav-btn" id="nextMonth">›</button>
+    </div>
+    <div class="weekdays">
+      <div class="weekday sun">日</div><div class="weekday">月</div><div class="weekday">火</div>
+      <div class="weekday">水</div><div class="weekday">木</div><div class="weekday">金</div>
+      <div class="weekday sat">土</div>
+    </div>
+    <div id="calendar" class="calendar"><div class="sub">読み込み中...</div></div>
+  </div>
+
+  <div class="actions">
+    <div id="selectedInfo" class="selected-info">先に名前と希望内容を選択してください</div>
+    <button id="registerBtn" class="primary" disabled>選択した日に登録・変更</button>
+    <button id="cancelBtn" class="danger" style="display:none;">選択した自分の登録を取り消す</button>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://ujdexmngrwqixeirvoil.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqZGV4bW5ncndxaXhlaXJ2b2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5NzAzNzIsImV4cCI6MjEwNTU0NjM3Mn0.aMJo_dwqnVmGL72jUCG0vJ7G4Q72fpJOPRsmhwjeC4M";
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentDate = new Date(); currentDate.setDate(1);
+let staffs = [];
+let requestTypes = [];
+let schedule = {};
+let holidays = {};
+let selectedDates = new Set();
+
+const staffSelect = document.getElementById("staffSelect");
+const requestSelect = document.getElementById("requestSelect");
+const noteInput = document.getElementById("noteInput");
+const calendar = document.getElementById("calendar");
+const monthTitle = document.getElementById("monthTitle");
+const selectedInfo = document.getElementById("selectedInfo");
+const registerBtn = document.getElementById("registerBtn");
+const cancelBtn = document.getElementById("cancelBtn");
+const message = document.getElementById("message");
+const legend = document.getElementById("legend");
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+function dateKey(y,m,d) {
+  return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+}
+function todayKey() {
+  const d = new Date();
+  return dateKey(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function showMessage(text, type="ok") {
+  message.className = "message " + type;
+  message.textContent = text;
+  window.scrollTo({top:0, behavior:"smooth"});
+  setTimeout(() => message.className = "message", 4500);
+}
+async function loadHolidays() {
+  try {
+    const r = await fetch("https://holidays-jp.github.io/api/v1/date.json", {cache:"no-store"});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    holidays = await r.json();
+  } catch(e) {
+    holidays = {};
+    console.warn(e);
+  }
+}
+async function loadMaster() {
+  const [s, t] = await Promise.all([
+    client.rpc("central_get_active_staffs"),
+    client.rpc("central_get_request_types")
+  ]);
+  if (s.error) { showMessage("職員一覧を取得できませんでした：" + s.error.message, "error"); return false; }
+  if (t.error) { showMessage("希望内容を取得できませんでした：" + t.error.message, "error"); return false; }
+
+  staffs = s.data || []; requestTypes = t.data || [];
+
+  staffSelect.innerHTML = '<option value="">名前を選択してください</option>';
+  staffs.forEach(staff => {
+    const o = document.createElement("option");
+    o.value = staff.id; o.textContent = staff.name;
+    staffSelect.appendChild(o);
+  });
+
+  requestSelect.innerHTML = '<option value="">希望内容を選択してください</option>';
+  legend.innerHTML = "";
+  requestTypes.forEach(t => {
+    const o = document.createElement("option");
+    o.value = t.id; o.textContent = `${t.symbol}　${t.name}`;
+    requestSelect.appendChild(o);
+
+    const item = document.createElement("div");
+    item.className = "legend-item";
+    item.innerHTML = `<span class="legend-dot" style="background:${esc(t.color)}"></span>${esc(t.symbol)} ${esc(t.name)}`;
+    legend.appendChild(item);
+  });
+  return true;
+}
+async function loadSchedule() {
+  const y=currentDate.getFullYear(), m=currentDate.getMonth();
+  const start=dateKey(y,m,1), end=dateKey(y,m,new Date(y,m+1,0).getDate());
+  const r = await client.rpc("central_get_shift_requests", {p_start_date:start, p_end_date:end});
+  if (r.error) { showMessage("希望状況を取得できませんでした：" + r.error.message, "error"); return; }
+  schedule = {};
+  (r.data || []).forEach(row => {
+    if (!schedule[row.work_date]) schedule[row.work_date] = [];
+    schedule[row.work_date].push({
+      staffId: row.staff_id,
+      staffName: row.staff_name,
+      typeId: row.request_type_id,
+      typeName: row.request_type_name,
+      symbol: row.request_symbol,
+      color: row.request_color,
+      note: row.note || ""
+    });
+  });
+  renderCalendar();
+}
+function renderCalendar() {
+  calendar.innerHTML = "";
+  const y=currentDate.getFullYear(), m=currentDate.getMonth();
+  monthTitle.textContent = `${y}年 ${m+1}月`;
+  const first = new Date(y,m,1).getDay();
+  const last = new Date(y,m+1,0).getDate();
+
+  for (let i=0;i<first;i++) {
+    const e=document.createElement("div"); e.className="day empty"; calendar.appendChild(e);
+  }
+  for (let d=1;d<=last;d++) {
+    const key=dateKey(y,m,d), weekday=new Date(y,m,d).getDay();
+    const entries=schedule[key] || [], holidayName=holidays[key] || "";
+    const isPast=key<todayKey(), isSelected=selectedDates.has(key);
+    const el=document.createElement("div"); el.className="day";
+    if (isPast) el.classList.add("past");
+    if (entries.length) el.classList.add("has-requests");
+    if (isSelected) el.classList.add("selected");
+    if (holidayName) el.title=holidayName;
+
+    let dc="";
+    if (weekday===0 || holidayName) dc=holidayName?"holiday-date":"sun-date";
+    else if (weekday===6) dc="sat-date";
+
+    el.innerHTML = `<div class="date-num ${dc}">${d}</div><div class="count">${entries.length}件</div>`;
+    entries.forEach(x => {
+      const own = staffSelect.value && x.staffId === staffSelect.value;
+      const tag=document.createElement("div");
+      tag.className="req-tag" + (own ? " own" : "");
+      tag.style.background=x.color || "#64748b";
+      tag.title = x.note ? `${x.staffName}：${x.typeName}（${x.note}）` : `${x.staffName}：${x.typeName}`;
+      tag.textContent = `${x.staffName} ${x.symbol}`;
+      el.appendChild(tag);
+    });
+    if (isSelected) {
+      const mark=document.createElement("div"); mark.className="selected-mark"; mark.textContent="✓ 選択中"; el.appendChild(mark);
+    }
+    if (!isPast) el.addEventListener("click", () => {
+      if (!staffSelect.value) { showMessage("先に自分の名前を選択してください。","error"); return; }
+      if (selectedDates.has(key)) selectedDates.delete(key); else selectedDates.add(key);
+      renderCalendar();
+    });
+    calendar.appendChild(el);
+  }
+  updateActions();
+}
+function updateActions() {
+  const staffId=staffSelect.value, typeId=requestSelect.value, dates=[...selectedDates];
+  if (!staffId || !typeId) {
+    selectedInfo.textContent="先に名前と希望内容を選択してください";
+    registerBtn.disabled=true; cancelBtn.style.display="none"; return;
+  }
+  if (!dates.length) {
+    selectedInfo.textContent="登録したい日を選択してください";
+    registerBtn.disabled=true; cancelBtn.style.display="none"; return;
+  }
+  const type=requestTypes.find(x=>x.id===typeId);
+  const ownDates=dates.filter(d => (schedule[d]||[]).some(x=>x.staffId===staffId));
+  selectedInfo.textContent=`${dates.length}日を「${type ? type.name : "選択内容"}」で登録・変更`;
+  registerBtn.disabled=false;
+  cancelBtn.style.display=ownDates.length ? "block":"none";
+  cancelBtn.textContent=`選択した自分の登録を取り消す（${ownDates.length}日）`;
+}
+staffSelect.addEventListener("change", () => { selectedDates.clear(); renderCalendar(); });
+requestSelect.addEventListener("change", updateActions);
+
+registerBtn.addEventListener("click", async () => {
+  const staffId=staffSelect.value, typeId=requestSelect.value, dates=[...selectedDates];
+  if (!staffId || !typeId || !dates.length) return;
+  registerBtn.disabled=true; registerBtn.textContent="登録中...";
+  let ok=0, ng=0;
+  for (const d of dates) {
+    const r=await client.rpc("central_set_shift_request", {
+      p_staff_id:staffId, p_work_date:d, p_request_type_id:typeId, p_note:noteInput.value.trim() || null
+    });
+    if (r.error) ng++; else ok++;
+  }
+  selectedDates.clear();
+  await loadSchedule();
+  registerBtn.textContent="選択した日に登録・変更";
+  showMessage(ng ? `${ok}日登録、${ng}日は登録できませんでした。` : `${ok}日分を登録しました。`, ng ? "error":"ok");
+});
+
+cancelBtn.addEventListener("click", async () => {
+  const staffId=staffSelect.value;
+  const dates=[...selectedDates].filter(d => (schedule[d]||[]).some(x=>x.staffId===staffId));
+  if (!dates.length) return;
+  if (!confirm(`${dates.length}日分の自分の希望登録を取り消しますか？`)) return;
+  cancelBtn.disabled=true; cancelBtn.textContent="取消中...";
+  let ok=0, ng=0;
+  for (const d of dates) {
+    const r=await client.rpc("central_cancel_shift_request",{p_staff_id:staffId,p_work_date:d});
+    if (r.error) ng++; else ok++;
+  }
+  cancelBtn.disabled=false; selectedDates.clear();
+  await loadSchedule();
+  showMessage(ng ? `${ok}日取消、${ng}日は取り消せませんでした。` : `${ok}日分を取り消しました。`, ng ? "error":"ok");
+});
+
+document.getElementById("prevMonth").addEventListener("click", async () => {
+  currentDate.setMonth(currentDate.getMonth()-1); selectedDates.clear(); await loadSchedule();
+});
+document.getElementById("nextMonth").addEventListener("click", async () => {
+  currentDate.setMonth(currentDate.getMonth()+1); selectedDates.clear(); await loadSchedule();
+});
+
+(async function start(){
+  await loadHolidays();
+  const ready=await loadMaster();
+  if (ready) await loadSchedule();
+})();
+</script>
+</body>
+</html>
