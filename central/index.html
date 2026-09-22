@@ -32,6 +32,11 @@
     .request-section:first-of-type { margin-top:0; }
     .request-section-title { font-size:14px; font-weight:900; margin-bottom:7px; color:#334155; }
     .request-section-hint { font-size:12px; color:#64748b; margin-top:6px; line-height:1.45; }
+    .hidden { display:none !important; }
+    .staff-kind {
+      display:inline-block; margin-top:8px; padding:4px 9px; border-radius:999px;
+      background:#eef2ff; color:#3730a3; font-size:12px; font-weight:800;
+    }
     .message { display:none; padding:12px; margin-bottom:12px; border-radius:12px; font-size:14px; font-weight:800; }
     .message.ok { display:block; background:#dcfce7; color:#166534; }
     .message.error { display:block; background:#fee2e2; color:#991b1b; }
@@ -110,20 +115,20 @@
     <div class="field">
       <label>希望内容</label>
       <div class="request-section">
-        <div class="request-section-title">休み・希望</div>
+        <div class="request-section-title">希望を選択</div>
         <select id="requestSelect">
-          <option value="">休み・希望を選択してください</option>
+          <option value="">希望内容を選択してください</option>
         </select>
-        <div class="request-section-hint">休み希望・有給・早出希望・遅出希望など</div>
+        <div id="staffKind" class="staff-kind hidden"></div>
       </div>
-      <div class="request-section">
-        <div class="request-section-title">勤務できる時間</div>
+      <div id="workTimeSection" class="request-section hidden">
+        <div class="request-section-title">勤務時間</div>
         <select id="workTimeSelect">
           <option value="">勤務時間を選択してください</option>
         </select>
-        <div class="request-section-hint">勤務できる時間を登録するときはこちら</div>
+        <div id="workTimeHint" class="request-section-hint"></div>
       </div>
-      <div class="help">どちらか1つを選択してください。片方を選ぶと、もう片方は自動で解除されます。</div>
+      <div class="help">名前を選ぶと、社員・パートに合わせて選べる勤務時間だけ表示します。</div>
     </div>
     <div class="field">
       <label for="noteInput">メモ（必要なときだけ）</label>
@@ -168,6 +173,9 @@ let selectedDates = new Set();
 const staffSelect = document.getElementById("staffSelect");
 const requestSelect = document.getElementById("requestSelect");
 const workTimeSelect = document.getElementById("workTimeSelect");
+const workTimeSection = document.getElementById("workTimeSection");
+const workTimeHint = document.getElementById("workTimeHint");
+const staffKind = document.getElementById("staffKind");
 const noteInput = document.getElementById("noteInput");
 const calendar = document.getElementById("calendar");
 const monthTitle = document.getElementById("monthTitle");
@@ -221,20 +229,8 @@ async function loadMaster() {
     staffSelect.appendChild(o);
   });
 
-  requestSelect.innerHTML = '<option value="">休み・希望を選択してください</option>';
-  workTimeSelect.innerHTML = '<option value="">勤務時間を選択してください</option>';
-
-  requestTypes.forEach(t => {
-    const o = document.createElement("option");
-    o.value = t.id;
-    o.textContent = t.name;
-
-    if (isWorkTimeType(t)) {
-      workTimeSelect.appendChild(o);
-    } else {
-      requestSelect.appendChild(o);
-    }
-  });
+  buildRequestOptions();
+  updateStaffDependentOptions();
   return true;
 }
 async function loadSchedule() {
@@ -257,11 +253,113 @@ async function loadSchedule() {
   });
   renderCalendar();
 }
-function isWorkTimeType(t) {
-  return Number(t.sort_order) >= 100 && Number(t.sort_order) < 900;
+const PART_TIME_NAMES = new Set([
+  "松本","森","有村","宮路","上原","上原み","小松た","上口","堀之内"
+]);
+
+function selectedStaff() {
+  return staffs.find(s => s.id === staffSelect.value) || null;
+}
+function isPartTimeStaff() {
+  const s = selectedStaff();
+  return !!(s && PART_TIME_NAMES.has(s.name));
+}
+function requestTypeByName(name) {
+  return requestTypes.find(t => t.name === name) || null;
+}
+function buildRequestOptions() {
+  requestSelect.innerHTML = '<option value="">希望内容を選択してください</option>';
+
+  const baseOptions = [
+    ["leave:休み希望", "休み希望"],
+    ["leave:有給", "有給"],
+    ["early", "早番"],
+    ["late", "遅番"]
+  ];
+
+  if (!isPartTimeStaff() && selectedStaff()) {
+    baseOptions.splice(3, 0, ["normal", "通常勤務"]);
+  }
+
+  baseOptions.forEach(([value, label]) => {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = label;
+    requestSelect.appendChild(o);
+  });
+}
+function timeNamesFor(category) {
+  const part = isPartTimeStaff();
+
+  if (category === "early") {
+    return part
+      ? ["7:00〜12:00", "7:30〜12:30"]
+      : ["7:00〜16:00", "7:30〜16:00"];
+  }
+  if (category === "late") {
+    return part ? ["13:30〜19:00"] : ["10:00〜19:00"];
+  }
+  if (category === "normal") {
+    return part ? [] : ["8:00〜17:00", "9:00〜18:00"];
+  }
+  return [];
+}
+function updateStaffDependentOptions() {
+  const s = selectedStaff();
+
+  if (!s) {
+    staffKind.classList.add("hidden");
+    requestSelect.innerHTML = '<option value="">先に名前を選択してください</option>';
+    requestSelect.disabled = true;
+    workTimeSection.classList.add("hidden");
+    workTimeSelect.innerHTML = '<option value="">勤務時間を選択してください</option>';
+    return;
+  }
+
+  requestSelect.disabled = false;
+  staffKind.classList.remove("hidden");
+  staffKind.textContent = isPartTimeStaff() ? "パート" : "社員";
+
+  buildRequestOptions();
+  requestSelect.value = "";
+  workTimeSection.classList.add("hidden");
+  workTimeSelect.innerHTML = '<option value="">勤務時間を選択してください</option>';
+}
+function updateTimeOptions() {
+  const category = requestSelect.value;
+  const names = timeNamesFor(category);
+
+  workTimeSelect.innerHTML = '<option value="">勤務時間を選択してください</option>';
+
+  if (!["early","late","normal"].includes(category)) {
+    workTimeSection.classList.add("hidden");
+    return;
+  }
+
+  workTimeSection.classList.remove("hidden");
+  names.forEach(name => {
+    const t = requestTypeByName(name);
+    if (!t) return;
+    const o = document.createElement("option");
+    o.value = t.id;
+    o.textContent = t.name;
+    workTimeSelect.appendChild(o);
+  });
+
+  const label = category === "early" ? "早番" : category === "late" ? "遅番" : "通常勤務";
+  workTimeHint.textContent =
+    (isPartTimeStaff() ? "パート" : "社員") + "の" + label + "で選べる時間です。";
 }
 function getSelectedTypeId() {
-  return workTimeSelect.value || requestSelect.value;
+  const category = requestSelect.value;
+
+  if (category.startsWith("leave:")) {
+    const name = category.slice(6);
+    const t = requestTypeByName(name);
+    return t ? t.id : "";
+  }
+
+  return workTimeSelect.value;
 }
 function renderCalendar() {
   calendar.innerHTML = "";
@@ -311,8 +409,16 @@ function renderCalendar() {
 }
 function updateActions() {
   const staffId=staffSelect.value, typeId=getSelectedTypeId(), dates=[...selectedDates];
-  if (!staffId || !typeId) {
-    selectedInfo.textContent="先に名前と希望内容を選択してください";
+  if (!staffId) {
+    selectedInfo.textContent="先に名前を選択してください";
+    registerBtn.disabled=true; cancelBtn.style.display="none"; return;
+  }
+  if (!requestSelect.value) {
+    selectedInfo.textContent="希望内容を選択してください";
+    registerBtn.disabled=true; cancelBtn.style.display="none"; return;
+  }
+  if (!typeId) {
+    selectedInfo.textContent="勤務時間を選択してください";
     registerBtn.disabled=true; cancelBtn.style.display="none"; return;
   }
   if (!dates.length) {
@@ -326,15 +432,16 @@ function updateActions() {
   cancelBtn.style.display=ownDates.length ? "block":"none";
   cancelBtn.textContent=`選択した自分の登録を取り消す（${ownDates.length}日）`;
 }
-staffSelect.addEventListener("change", () => { selectedDates.clear(); renderCalendar(); });
+staffSelect.addEventListener("change", () => {
+  selectedDates.clear();
+  updateStaffDependentOptions();
+  renderCalendar();
+});
 requestSelect.addEventListener("change", () => {
-  if (requestSelect.value) workTimeSelect.value = "";
+  updateTimeOptions();
   updateActions();
 });
-workTimeSelect.addEventListener("change", () => {
-  if (workTimeSelect.value) requestSelect.value = "";
-  updateActions();
-});
+workTimeSelect.addEventListener("change", updateActions);
 
 registerBtn.addEventListener("click", async () => {
   const staffId=staffSelect.value, typeId=getSelectedTypeId(), dates=[...selectedDates];
@@ -379,7 +486,10 @@ document.getElementById("nextMonth").addEventListener("click", async () => {
 (async function start(){
   await loadHolidays();
   const ready=await loadMaster();
-  if (ready) await loadSchedule();
+  if (ready) {
+    updateStaffDependentOptions();
+    await loadSchedule();
+  }
 })();
 </script>
 </body>
