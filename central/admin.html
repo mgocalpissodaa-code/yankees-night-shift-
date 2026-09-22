@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>セントラル シフト希望 管理者</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;background:#f5f7fb;color:#1f2937}
+    .app{max-width:1040px;margin:0 auto;padding:18px 12px 44px}
+    .card{background:#fff;border-radius:18px;padding:16px;box-shadow:0 3px 16px rgba(0,0,0,.06);margin-bottom:14px}
+    h1{margin:0 0 6px;font-size:24px} h2{margin:0 0 12px;font-size:19px}
+    .sub{color:#64748b;font-size:14px;line-height:1.55}.hidden{display:none!important}
+    label{display:block;font-weight:800;margin:0 0 7px}
+    select,input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:11px;background:#fff;font-size:15px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+    button{border:0;border-radius:11px;padding:12px 14px;font-size:15px;font-weight:900;cursor:pointer}
+    button:disabled{opacity:.45}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#1f2937}.danger{background:#fee2e2;color:#b91c1c}
+    .message{display:none;padding:12px;margin-bottom:12px;border-radius:12px;font-size:14px;font-weight:800}
+    .message.ok{display:block;background:#dcfce7;color:#166534}.message.error{display:block;background:#fee2e2;color:#991b1b}
+    .top-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.top-actions a{text-decoration:none}
+    .staff-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #e2e8f0}
+    .staff-row:last-child{border-bottom:0}.staff-name{font-weight:800}.staff-actions{display:flex;gap:7px}.small{padding:8px 10px;font-size:13px}
+    .add-row{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:12px}
+    .month-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+    .month-title{font-size:22px;font-weight:900;text-align:center;flex:1}
+    .nav-btn{width:46px;height:46px;padding:0;background:#eef2ff;color:#2563eb;font-size:24px}
+    .weekdays,.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+    .weekday{text-align:center;font-size:12px;font-weight:800;color:#64748b;padding-bottom:4px}.sun{color:#ef4444}.sat{color:#3b82f6}
+    .day{min-height:122px;border:1px solid #e2e8f0;border-radius:11px;background:#fff;padding:6px 4px;overflow:hidden;cursor:pointer}
+    .day.empty{visibility:hidden}.day.past{opacity:.45}.day.selected{border:2px solid #2563eb;background:#eff6ff}.day.has{background:#fffaf5}
+    .date-num{font-size:17px;font-weight:900;margin-bottom:4px}.sun-date,.holiday-date{color:#ef4444}.sat-date{color:#3b82f6}
+    .count{font-size:10px;text-align:center;font-weight:800;background:#f1f5f9;color:#475569;border-radius:7px;padding:3px;margin-bottom:3px}
+    .tag{display:block;width:100%;margin:3px 0 0;padding:4px 3px;border-radius:7px;color:#fff;font-size:10px;font-weight:800;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    .selected-mark{text-align:center;margin-top:4px;font-size:10px;font-weight:800;color:#2563eb}
+    .register-actions{margin-top:10px}.selected-info{text-align:center;color:#475569;font-size:13px;font-weight:800;margin-bottom:8px}
+    .legend{display:flex;gap:7px;flex-wrap:wrap}.legend-item{font-size:12px;font-weight:800;border:1px solid #e2e8f0;border-radius:999px;padding:5px 8px}
+    .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px}
+    .summary-item{background:#f8fafc;border-radius:10px;padding:9px}.summary-name{font-weight:800;font-size:13px}.summary-count{font-size:20px;font-weight:900;margin-top:2px}
+    .matrix-wrap{overflow:auto;border:1px solid #e2e8f0;border-radius:10px}
+    table{border-collapse:collapse;font-size:11px;white-space:nowrap}th,td{border:1px solid #e2e8f0;text-align:center;padding:5px;min-width:32px}
+    th{background:#f8fafc;position:sticky;top:0;z-index:2}.sticky-col{position:sticky;left:0;background:#fff;z-index:1;min-width:78px;font-weight:800}
+    th.sticky-col{background:#f8fafc;z-index:3}.cell-symbol{font-weight:900}.cell-note{font-size:9px;color:#64748b;max-width:80px;overflow:hidden;text-overflow:ellipsis}
+    .edit-original{padding:10px;background:#f8fafc;border-radius:10px;margin-bottom:10px;font-weight:800}
+    @media(max-width:600px){.app{padding-left:6px;padding-right:6px}.card{padding:11px 8px}.grid2,.grid3{grid-template-columns:1fr}.calendar,.weekdays{gap:3px}.day{min-height:104px;padding:4px 2px}.tag,.count{font-size:9px}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="card">
+    <h1>🔐 セントラル シフト希望 管理者</h1>
+    <div class="sub">職員の希望確認・登録・変更・取消と、月間一覧を確認できます。</div>
+    <div class="top-actions"><a href="./"><button class="secondary">職員用画面へ</button></a></div>
+  </div>
+
+  <div id="message" class="message"></div>
+
+  <div id="loginView" class="card">
+    <h2>管理者ログイン</h2>
+    <label for="adminPassword">パスワード</label>
+    <input id="adminPassword" type="password" autocomplete="current-password">
+    <button id="loginBtn" class="primary" style="width:100%;margin-top:10px">ログイン</button>
+  </div>
+
+  <div id="adminView" class="hidden">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div><h2 style="margin:0">管理画面</h2><div class="sub">セントラルの日勤スタッフ希望</div></div>
+        <button id="logoutBtn" class="secondary">ログアウト</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>職員管理</h2>
+      <div class="sub">試作では、今のシフト表の日勤職員を初期登録しています。</div>
+      <div id="staffList"></div>
+      <div class="add-row">
+        <input id="newStaffName" placeholder="追加する職員名">
+        <button id="addStaffBtn" class="primary">追加</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>希望区分</h2>
+      <div id="legend" class="legend"></div>
+    </div>
+
+    <div class="card">
+      <h2>管理者から登録</h2>
+      <div class="grid3">
+        <div><label>職員</label><select id="staffSelect"></select></div>
+        <div><label>希望内容</label><select id="requestSelect"></select></div>
+        <div><label>メモ</label><input id="noteInput" maxlength="80" placeholder="必要な場合のみ"></div>
+      </div>
+      <div class="sub" style="margin-top:9px">下のカレンダーから複数日を選択できます。既存の日を登録すると内容が上書きされます。</div>
+    </div>
+
+    <div class="card">
+      <div class="month-nav">
+        <button id="prevMonth" class="nav-btn">‹</button>
+        <div id="monthTitle" class="month-title"></div>
+        <button id="nextMonth" class="nav-btn">›</button>
+      </div>
+      <div class="weekdays">
+        <div class="weekday sun">日</div><div class="weekday">月</div><div class="weekday">火</div>
+        <div class="weekday">水</div><div class="weekday">木</div><div class="weekday">金</div><div class="weekday sat">土</div>
+      </div>
+      <div id="calendar" class="calendar"></div>
+      <div class="register-actions">
+        <div id="selectedInfo" class="selected-info">日付を選択してください</div>
+        <button id="registerBtn" class="primary" style="width:100%" disabled>選択した日に登録・変更</button>
+      </div>
+    </div>
+
+    <div id="editCard" class="card hidden">
+      <h2>登録を変更・取消</h2>
+      <div id="editOriginal" class="edit-original"></div>
+      <div class="grid2">
+        <div><label>職員</label><select id="editStaff"></select></div>
+        <div><label>日付</label><input id="editDate" type="date"></div>
+        <div><label>希望内容</label><select id="editType"></select></div>
+        <div><label>メモ</label><input id="editNote" maxlength="80"></div>
+      </div>
+      <div class="top-actions">
+        <button id="changeBtn" class="primary">変更する</button>
+        <button id="deleteRequestBtn" class="danger">この登録を取り消す</button>
+        <button id="closeEditBtn" class="secondary">閉じる</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="summaryTitle">月の希望件数</h2>
+      <div id="summary" class="summary"></div>
+    </div>
+
+    <div class="card">
+      <h2>月間希望一覧</h2>
+      <div class="sub" style="margin-bottom:10px">今の「休み希望」表に近い見方です。横にスクロールできます。</div>
+      <div class="matrix-wrap"><table id="matrix"></table></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL="https://ujdexmngrwqixeirvoil.supabase.co";
+const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqZGV4bW5ncndxaXhlaXJ2b2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5NzAzNzIsImV4cCI6MjEwNTU0NjM3Mn0.aMJo_dwqnVmGL72jUCG0vJ7G4Q72fpJOPRsmhwjeC4M";
+const ADMIN_EMAIL="admin@example.com";
+const client=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+let currentDate=new Date();currentDate.setDate(1);
+let staffs=[],managedStaffs=[],requestTypes=[],schedule={},holidays={},selectedDates=new Set(),selectedRegistration=null;
+
+const $=id=>document.getElementById(id);
+const loginView=$("loginView"),adminView=$("adminView"),message=$("message"),calendar=$("calendar"),monthTitle=$("monthTitle"),
+ staffSelect=$("staffSelect"),requestSelect=$("requestSelect"),noteInput=$("noteInput"),selectedInfo=$("selectedInfo"),registerBtn=$("registerBtn"),
+ editCard=$("editCard"),editOriginal=$("editOriginal"),editStaff=$("editStaff"),editDate=$("editDate"),editType=$("editType"),editNote=$("editNote");
+
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function dateKey(y,m,d){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`}
+function todayKey(){const d=new Date();return dateKey(d.getFullYear(),d.getMonth(),d.getDate())}
+function showMessage(text,type="ok"){message.className="message "+type;message.textContent=text;window.scrollTo({top:0,behavior:"smooth"});setTimeout(()=>message.className="message",4500)}
+async function loadHolidays(){try{const r=await fetch("https://holidays-jp.github.io/api/v1/date.json",{cache:"no-store"});holidays=r.ok?await r.json():{}}catch(e){holidays={}}}
+
+async function loadMasters(){
+  const [s,t]=await Promise.all([client.rpc("central_get_active_staffs"),client.rpc("central_get_request_types")]);
+  if(s.error){showMessage("職員一覧を取得できません："+s.error.message,"error");return false}
+  if(t.error){showMessage("希望区分を取得できません："+t.error.message,"error");return false}
+  staffs=s.data||[];requestTypes=t.data||[];
+  fillStaffSelect(staffSelect,true);fillStaffSelect(editStaff,false);
+  fillTypeSelect(requestSelect,true);fillTypeSelect(editType,false);
+  renderLegend();return true;
+}
+function fillStaffSelect(el,placeholder){
+  el.innerHTML=placeholder?'<option value="">職員を選択してください</option>':"";
+  staffs.forEach(s=>{const o=document.createElement("option");o.value=s.id;o.textContent=s.name;el.appendChild(o)})
+}
+function fillTypeSelect(el,placeholder){
+  el.innerHTML=placeholder?'<option value="">希望内容を選択してください</option>':"";
+  requestTypes.forEach(t=>{const o=document.createElement("option");o.value=t.id;o.textContent=`${t.symbol}　${t.name}`;el.appendChild(o)})
+}
+function renderLegend(){
+  $("legend").innerHTML="";
+  requestTypes.forEach(t=>{const d=document.createElement("div");d.className="legend-item";d.innerHTML=`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${esc(t.color)};margin-right:4px"></span>${esc(t.symbol)} ${esc(t.name)}`;$("legend").appendChild(d)})
+}
+async function loadManagedStaffs(){
+  const r=await client.rpc("central_admin_list_staffs");
+  if(r.error){showMessage("職員管理を読み込めません："+r.error.message,"error");return}
+  managedStaffs=r.data||[];renderStaffList();
+}
+function renderStaffList(){
+  const box=$("staffList");box.innerHTML="";
+  managedStaffs.forEach(s=>{
+    const row=document.createElement("div");row.className="staff-row";
+    const name=document.createElement("div");name.className="staff-name";name.textContent=s.name;
+    const actions=document.createElement("div");actions.className="staff-actions";
+    const rename=document.createElement("button");rename.className="secondary small";rename.textContent="名前変更";
+    rename.onclick=async()=>{const n=prompt("新しい名前",s.name);if(n===null)return;const v=n.trim();if(!v)return;const r=await client.rpc("central_admin_rename_staff",{p_staff_id:s.id,p_name:v});if(r.error)return showMessage(r.error.message,"error");await refreshAll();showMessage("名前を変更しました。")}
+    const del=document.createElement("button");del.className="danger small";del.textContent="削除";
+    del.onclick=async()=>{if(!confirm(`${s.name} さんを削除しますか？\nこの職員の希望登録も削除されます。`))return;if(!confirm("本当に削除しますか？"))return;const r=await client.rpc("central_admin_delete_staff",{p_staff_id:s.id});if(r.error)return showMessage(r.error.message,"error");await refreshAll();showMessage(`${s.name} さんを削除しました。`)}
+    actions.append(rename,del);row.append(name,actions);box.appendChild(row);
+  })
+}
+async function loadSchedule(){
+  const y=currentDate.getFullYear(),m=currentDate.getMonth(),start=dateKey(y,m,1),end=dateKey(y,m,new Date(y,m+1,0).getDate());
+  const r=await client.rpc("central_get_shift_requests",{p_start_date:start,p_end_date:end});
+  if(r.error){showMessage("希望状況を取得できません："+r.error.message,"error");return}
+  schedule={};
+  (r.data||[]).forEach(x=>{
+    if(!schedule[x.work_date])schedule[x.work_date]=[];
+    schedule[x.work_date].push({staffId:x.staff_id,staffName:x.staff_name,typeId:x.request_type_id,typeName:x.request_type_name,symbol:x.request_symbol,color:x.request_color,note:x.note||""});
+  });
+  renderCalendar();renderSummary();renderMatrix();
+}
+function renderCalendar(){
+  calendar.innerHTML="";const y=currentDate.getFullYear(),m=currentDate.getMonth();
+  monthTitle.textContent=`${y}年 ${m+1}月`;const first=new Date(y,m,1).getDay(),last=new Date(y,m+1,0).getDate();
+  for(let i=0;i<first;i++){const e=document.createElement("div");e.className="day empty";calendar.appendChild(e)}
+  for(let d=1;d<=last;d++){
+    const key=dateKey(y,m,d),weekday=new Date(y,m,d).getDay(),entries=schedule[key]||[],holiday=holidays[key]||"",past=key<todayKey(),sel=selectedDates.has(key);
+    const el=document.createElement("div");el.className="day";if(past)el.classList.add("past");if(entries.length)el.classList.add("has");if(sel)el.classList.add("selected");if(holiday)el.title=holiday;
+    let dc="";if(weekday===0||holiday)dc=holiday?"holiday-date":"sun-date";else if(weekday===6)dc="sat-date";
+    el.innerHTML=`<div class="date-num ${dc}">${d}</div><div class="count">${entries.length}件</div>`;
+    entries.forEach(x=>{const b=document.createElement("button");b.className="tag";b.style.background=x.color||"#64748b";b.textContent=`${x.staffName} ${x.symbol}`;b.title=x.note?`${x.typeName}：${x.note}`:x.typeName;b.onclick=e=>{e.stopPropagation();openEdit(key,x)};el.appendChild(b)});
+    if(sel){const mark=document.createElement("div");mark.className="selected-mark";mark.textContent="✓ 選択中";el.appendChild(mark)}
+    if(!past)el.onclick=()=>{selectedDates.has(key)?selectedDates.delete(key):selectedDates.add(key);renderCalendar()};
+    calendar.appendChild(el)
+  }updateRegisterArea()
+}
+function updateRegisterArea(){
+  const dates=[...selectedDates];if(!staffSelect.value||!requestSelect.value){selectedInfo.textContent="職員と希望内容を選択してください";registerBtn.disabled=true;return}
+  if(!dates.length){selectedInfo.textContent="日付を選択してください";registerBtn.disabled=true;return}
+  const t=requestTypes.find(x=>x.id===requestSelect.value);selectedInfo.textContent=`${dates.length}日を「${t?t.name:"選択内容"}」で登録・変更`;registerBtn.disabled=false
+}
+function renderSummary(){
+  $("summaryTitle").textContent=`${currentDate.getFullYear()}年${currentDate.getMonth()+1}月の希望件数`;
+  const counts={};Object.values(schedule).flat().forEach(x=>counts[x.staffId]=(counts[x.staffId]||0)+1);
+  const box=$("summary");box.innerHTML="";
+  staffs.forEach(s=>{const d=document.createElement("div");d.className="summary-item";d.innerHTML=`<div class="summary-name">${esc(s.name)}</div><div class="summary-count">${counts[s.id]||0}<span style="font-size:12px">件</span></div>`;box.appendChild(d)})
+}
+function renderMatrix(){
+  const table=$("matrix"),y=currentDate.getFullYear(),m=currentDate.getMonth(),last=new Date(y,m+1,0).getDate();
+  let html='<thead><tr><th class="sticky-col">氏名</th>';
+  for(let d=1;d<=last;d++){const wd=["日","月","火","水","木","金","土"][new Date(y,m,d).getDay()];html+=`<th>${d}<br>${wd}</th>`}
+  html+='</tr></thead><tbody>';
+  staffs.forEach(s=>{
+    html+=`<tr><td class="sticky-col">${esc(s.name)}</td>`;
+    for(let d=1;d<=last;d++){const key=dateKey(y,m,d),x=(schedule[key]||[]).find(v=>v.staffId===s.id);html+=x?`<td title="${esc(x.typeName+(x.note?"："+x.note:""))}"><div class="cell-symbol" style="color:${esc(x.color)}">${esc(x.symbol)}</div>${x.note?`<div class="cell-note">${esc(x.note)}</div>`:""}</td>`:"<td></td>"}
+    html+="</tr>";
+  });html+="</tbody>";table.innerHTML=html
+}
+function openEdit(date,x){
+  selectedRegistration={date,staffId:x.staffId,staffName:x.staffName};
+  editOriginal.textContent=`${date}　${x.staffName}　${x.symbol} ${x.typeName}${x.note?"　"+x.note:""}`;
+  editStaff.value=x.staffId;editDate.value=date;editDate.min=todayKey();editType.value=x.typeId;editNote.value=x.note||"";
+  editCard.classList.remove("hidden");editCard.scrollIntoView({behavior:"smooth",block:"start"})
+}
+function closeEdit(){selectedRegistration=null;editCard.classList.add("hidden")}
+async function setOne(staffId,date,typeId,note){return client.rpc("central_set_shift_request",{p_staff_id:staffId,p_work_date:date,p_request_type_id:typeId,p_note:note||null})}
+async function cancelOne(staffId,date){return client.rpc("central_cancel_shift_request",{p_staff_id:staffId,p_work_date:date})}
+async function refreshAll(){await loadMasters();await loadManagedStaffs();await loadSchedule()}
+
+$("loginBtn").onclick=async()=>{
+  const password=$("adminPassword").value;if(!password)return showMessage("パスワードを入力してください。","error");
+  $("loginBtn").disabled=true;$("loginBtn").textContent="確認中...";
+  const r=await client.auth.signInWithPassword({email:ADMIN_EMAIL,password});
+  $("loginBtn").disabled=false;$("loginBtn").textContent="ログイン";
+  if(r.error)return showMessage("パスワードが違います。","error");
+  $("adminPassword").value="";await enterAdmin()
+};
+$("adminPassword").addEventListener("keydown",e=>{if(e.key==="Enter")$("loginBtn").click()});
+$("logoutBtn").onclick=async()=>{await client.auth.signOut();adminView.classList.add("hidden");loginView.classList.remove("hidden");selectedDates.clear();closeEdit()};
+$("addStaffBtn").onclick=async()=>{const n=$("newStaffName").value.trim();if(!n)return;const r=await client.rpc("central_admin_add_staff",{p_name:n});if(r.error)return showMessage(r.error.message,"error");$("newStaffName").value="";await refreshAll();showMessage(`${n} さんを追加しました。`)};
+staffSelect.onchange=updateRegisterArea;requestSelect.onchange=updateRegisterArea;
+registerBtn.onclick=async()=>{
+  const sid=staffSelect.value,tid=requestSelect.value,dates=[...selectedDates];if(!sid||!tid||!dates.length)return;
+  registerBtn.disabled=true;registerBtn.textContent="登録中...";let ok=0,ng=0;
+  for(const d of dates){const r=await setOne(sid,d,tid,noteInput.value.trim());r.error?ng++:ok++}
+  selectedDates.clear();await loadSchedule();registerBtn.textContent="選択した日に登録・変更";showMessage(ng?`${ok}日登録、${ng}日は失敗しました。`:`${ok}日分を登録しました。`,ng?"error":"ok")
+};
+$("changeBtn").onclick=async()=>{
+  if(!selectedRegistration)return;
+  const sid=editStaff.value,date=editDate.value,tid=editType.value,note=editNote.value.trim();
+  if(!sid||!date||!tid)return showMessage("変更内容をすべて選択してください。","error");
+  if(date<todayKey())return showMessage("過去の日付には変更できません。","error");
+  $("changeBtn").disabled=true;
+  const same=sid===selectedRegistration.staffId&&date===selectedRegistration.date;
+  let r;
+  if(same){r=await setOne(sid,date,tid,note)}
+  else{
+    r=await setOne(sid,date,tid,note);
+    if(!r.error){const old=await cancelOne(selectedRegistration.staffId,selectedRegistration.date);if(old.error){await cancelOne(sid,date);r={error:old.error}}}
+  }
+  $("changeBtn").disabled=false;if(r.error)return showMessage("変更できません："+r.error.message,"error");
+  closeEdit();await loadSchedule();showMessage("登録を変更しました。")
+};
+$("deleteRequestBtn").onclick=async()=>{
+  if(!selectedRegistration)return;if(!confirm(`${selectedRegistration.date} の ${selectedRegistration.staffName} さんの希望を取り消しますか？`))return;
+  const r=await cancelOne(selectedRegistration.staffId,selectedRegistration.date);if(r.error)return showMessage(r.error.message,"error");closeEdit();await loadSchedule();showMessage("登録を取り消しました。")
+};
+$("closeEditBtn").onclick=closeEdit;
+$("prevMonth").onclick=async()=>{currentDate.setMonth(currentDate.getMonth()-1);selectedDates.clear();closeEdit();await loadSchedule()};
+$("nextMonth").onclick=async()=>{currentDate.setMonth(currentDate.getMonth()+1);selectedDates.clear();closeEdit();await loadSchedule()};
+
+async function enterAdmin(){
+  loginView.classList.add("hidden");adminView.classList.remove("hidden");await loadHolidays();const ok=await loadMasters();if(!ok)return;await loadManagedStaffs();await loadSchedule()
+}
+(async function start(){
+  const r=await client.auth.getSession(),s=r.data.session;
+  if(s&&s.user&&s.user.email===ADMIN_EMAIL)await enterAdmin();else{if(s)await client.auth.signOut();loginView.classList.remove("hidden");adminView.classList.add("hidden")}
+})();
+</script>
+</body>
+</html>
