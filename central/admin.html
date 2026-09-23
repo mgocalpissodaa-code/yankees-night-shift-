@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>セントラル シフト希望 管理者</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx-populate@1.21.0/browser/xlsx-populate.min.js"></script>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;background:#f5f7fb;color:#1f2937}
@@ -216,6 +215,23 @@ function downloadBlob(blob,fileName){
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
+async function ensureXlsxPopulate(){
+  if(typeof XlsxPopulate!=="undefined")return;
+  await new Promise((resolve,reject)=>{
+    const existing=document.getElementById("xlsxPopulateScript");
+    if(existing){
+      existing.addEventListener("load",resolve,{once:true});
+      existing.addEventListener("error",()=>reject(new Error("Excel機能の読み込みに失敗しました")),{once:true});
+      return;
+    }
+    const s=document.createElement("script");
+    s.id="xlsxPopulateScript";
+    s.src="https://cdn.jsdelivr.net/npm/xlsx-populate@1.21.0/browser/xlsx-populate.min.js";
+    s.onload=resolve;
+    s.onerror=()=>reject(new Error("Excel機能の読み込みに失敗しました"));
+    document.head.appendChild(s);
+  });
+}
 function showMessage(text,type="ok"){message.className="message "+type;message.textContent=text;window.scrollTo({top:0,behavior:"smooth"});setTimeout(()=>message.className="message",4500)}
 async function loadHolidays(){try{const r=await fetch("https://holidays-jp.github.io/api/v1/date.json",{cache:"no-store"});holidays=r.ok?await r.json():{}}catch(e){holidays={}}}
 
@@ -226,7 +242,11 @@ async function loadMasters(){
   staffs=s.data||[];requestTypes=t.data||[];
   fillStaffSelect(staffSelect,true);fillStaffSelect(editStaff,false);
   fillTypeSelect(requestSelect,true);fillTypeSelect(editType,false);
-  renderLegend();return true;
+  renderLegend();
+  if(!staffs.length||!requestTypes.length){
+    showMessage(`マスターデータを読み込めませんでした（職員 ${staffs.length}名／希望区分 ${requestTypes.length}件）。ページを再読み込みしてください。`,"error");
+  }
+  return true;
 }
 function fillStaffSelect(el,placeholder){
   el.innerHTML=placeholder?'<option value="">職員を選択してください</option>':"";
@@ -386,7 +406,12 @@ excelFile.onchange=()=>{
 excelReflectBtn.onclick=async()=>{
   const file=excelFile.files&&excelFile.files[0];
   if(!file)return showMessage("元のシフト表Excelを選択してください。","error");
-  if(typeof XlsxPopulate==="undefined")return showMessage("Excel反映機能を読み込めませんでした。ページを再読み込みしてください。","error");
+
+  try{
+    await ensureXlsxPopulate();
+  }catch(e){
+    return showMessage("Excel反映機能を読み込めませんでした。通信状態を確認して、もう一度押してください。","error");
+  }
 
   const y=currentDate.getFullYear(),month=currentDate.getMonth()+1;
   const sheetName=`${month}月日勤`;
