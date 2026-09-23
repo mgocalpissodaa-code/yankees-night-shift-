@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>セントラル シフト希望 管理者</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-populate@1.21.0/browser/xlsx-populate.min.js"></script>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;background:#f5f7fb;color:#1f2937}
@@ -48,6 +49,10 @@
     th{background:#f8fafc;position:sticky;top:0;z-index:2}.sticky-col{position:sticky;left:0;background:#fff;z-index:1;min-width:78px;font-weight:800}
     th.sticky-col{background:#f8fafc;z-index:3}.cell-symbol{font-weight:900}.cell-note{font-size:9px;color:#64748b;max-width:80px;overflow:hidden;text-overflow:ellipsis}
     .edit-original{padding:10px;background:#f8fafc;border-radius:10px;margin-bottom:10px;font-weight:800}
+    .excel-target{display:inline-block;margin:8px 0 12px;padding:7px 10px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:13px;font-weight:900}
+    .excel-file-name{margin-top:7px;font-size:12px;color:#475569;word-break:break-all}
+    .excel-btn{width:100%;margin-top:10px;background:#059669;color:#fff}
+    .excel-note{margin-top:9px;padding:10px;border-radius:10px;background:#f8fafc;color:#475569;font-size:12px;line-height:1.55}
     @media(max-width:600px){.app{padding-left:6px;padding-right:6px}.card{padding:11px 8px}.grid2,.grid3{grid-template-columns:1fr}.calendar,.weekdays{gap:3px}.day{min-height:112px;padding:4px 2px}.count{font-size:9px}.tag-staff{font-size:9px}.tag-type{font-size:8px}}
   </style>
 </head>
@@ -140,6 +145,20 @@
     </div>
 
     <div class="card">
+      <h2>📥 シフト表Excelへ反映</h2>
+      <div class="sub">この画面で表示している月の希望を、選んだシフト表Excelの「○月日勤」へ直接入れます。「○月休み希望」は経由しません。</div>
+      <div id="excelTarget" class="excel-target">対象シートを確認中...</div>
+      <label for="excelFile">元のシフト表Excel</label>
+      <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+      <div id="excelFileName" class="excel-file-name">ファイルが選択されていません</div>
+      <button id="excelReflectBtn" class="excel-btn" disabled>この月の希望をExcelへ反映</button>
+      <div class="excel-note">
+        元のExcelそのものは上書きせず、希望を反映したコピーを保存します。<br>
+        今回確認した最新ファイルと同じ形式（例：「10月日勤」）を対象にしています。シフトを手入力した後のファイルでは、既存セルを上書きする前に確認が出ます。
+      </div>
+    </div>
+
+    <div class="card">
       <h2>月間希望一覧</h2>
       <div class="sub" style="margin-bottom:10px">今の「休み希望」表に近い見方です。横にスクロールできます。</div>
       <div class="matrix-wrap"><table id="matrix"></table></div>
@@ -159,11 +178,44 @@ let staffs=[],managedStaffs=[],requestTypes=[],schedule={},holidays={},selectedD
 const $=id=>document.getElementById(id);
 const loginView=$("loginView"),adminView=$("adminView"),message=$("message"),calendar=$("calendar"),monthTitle=$("monthTitle"),
  staffSelect=$("staffSelect"),requestSelect=$("requestSelect"),noteInput=$("noteInput"),selectedInfo=$("selectedInfo"),registerBtn=$("registerBtn"),
- editCard=$("editCard"),editOriginal=$("editOriginal"),editStaff=$("editStaff"),editDate=$("editDate"),editType=$("editType"),editNote=$("editNote");
+ editCard=$("editCard"),editOriginal=$("editOriginal"),editStaff=$("editStaff"),editDate=$("editDate"),editType=$("editType"),editNote=$("editNote"),
+ excelFile=$("excelFile"),excelFileName=$("excelFileName"),excelReflectBtn=$("excelReflectBtn"),excelTarget=$("excelTarget");
 
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function dateKey(y,m,d){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`}
 function todayKey(){const d=new Date();return dateKey(d.getFullYear(),d.getMonth(),d.getDate())}
+
+function normalizeExcelStaffName(v){
+  const n=String(v??"").replace(/\s+/g,"").trim();
+  if(n==="上原み")return "上原";
+  return n;
+}
+function requestToExcelText(x){
+  const t=String(x.typeName||"");
+  let v="";
+  if(t==="休み希望")v="◎";
+  else if(t==="有給")v="有";
+  else if(t==="早出希望")v="早・希";
+  else if(t==="遅出希望")v="遅・希";
+  else if(["7:00〜12:00","7:30〜12:30","7:00〜16:00","7:30〜16:00"].includes(t))v=`早・希\n${t}`;
+  else if(["13:30〜19:00","10:00〜19:00"].includes(t))v=`遅・希\n${t}`;
+  else if(["8:00〜17:00","9:00〜18:00"].includes(t))v=`希望\n${t}`;
+  else v=t||x.symbol||"希望";
+  if(x.note)v+=`\n※${x.note}`;
+  return v;
+}
+function updateExcelArea(){
+  const month=currentDate.getMonth()+1;
+  excelTarget.textContent=`対象：${currentDate.getFullYear()}年${month}月 → 「${month}月日勤」`;
+  excelReflectBtn.disabled=!excelFile.files.length;
+}
+function downloadBlob(blob,fileName){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=fileName;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
 function showMessage(text,type="ok"){message.className="message "+type;message.textContent=text;window.scrollTo({top:0,behavior:"smooth"});setTimeout(()=>message.className="message",4500)}
 async function loadHolidays(){try{const r=await fetch("https://holidays-jp.github.io/api/v1/date.json",{cache:"no-store"});holidays=r.ok?await r.json():{}}catch(e){holidays={}}}
 
@@ -250,7 +302,7 @@ function renderCalendar(){
     if(sel){const mark=document.createElement("div");mark.className="selected-mark";mark.textContent="✓ 選択中";el.appendChild(mark)}
     if(!past)el.onclick=()=>{selectedDates.has(key)?selectedDates.delete(key):selectedDates.add(key);renderCalendar()};
     calendar.appendChild(el)
-  }updateRegisterArea()
+  }updateRegisterArea();updateExcelArea()
 }
 function updateRegisterArea(){
   const dates=[...selectedDates];if(!staffSelect.value||!requestSelect.value){selectedInfo.textContent="職員と希望内容を選択してください";registerBtn.disabled=true;return}
@@ -324,6 +376,80 @@ $("deleteRequestBtn").onclick=async()=>{
   const r=await cancelOne(selectedRegistration.staffId,selectedRegistration.date);if(r.error)return showMessage(r.error.message,"error");closeEdit();await loadSchedule();showMessage("登録を取り消しました。")
 };
 $("closeEditBtn").onclick=closeEdit;
+
+excelFile.onchange=()=>{
+  const f=excelFile.files&&excelFile.files[0];
+  excelFileName.textContent=f?f.name:"ファイルが選択されていません";
+  updateExcelArea();
+};
+
+excelReflectBtn.onclick=async()=>{
+  const file=excelFile.files&&excelFile.files[0];
+  if(!file)return showMessage("元のシフト表Excelを選択してください。","error");
+  if(typeof XlsxPopulate==="undefined")return showMessage("Excel反映機能を読み込めませんでした。ページを再読み込みしてください。","error");
+
+  const y=currentDate.getFullYear(),month=currentDate.getMonth()+1;
+  const sheetName=`${month}月日勤`;
+  const entries=[];
+  Object.entries(schedule).forEach(([date,rows])=>{
+    if(!date.startsWith(`${y}-${String(month).padStart(2,"0")}-`))return;
+    const day=Number(date.slice(8,10));
+    rows.forEach(x=>entries.push({day,...x}));
+  });
+  if(!entries.length)return showMessage(`${month}月の希望登録がまだありません。`,"error");
+
+  excelReflectBtn.disabled=true;excelReflectBtn.textContent="Excelに反映中...";
+  try{
+    const workbook=await XlsxPopulate.fromDataAsync(file);
+    const sheet=workbook.sheet(sheetName);
+    if(!sheet){
+      const names=workbook.sheets().map(s=>s.name()).join("、");
+      throw new Error(`「${sheetName}」シートが見つかりません。現在のシート：${names}`);
+    }
+
+    const rowMap={};
+    for(let r=1;r<=40;r++){
+      const n=normalizeExcelStaffName(sheet.cell(r,1).value());
+      if(n)rowMap[n]=r;
+    }
+
+    const writes=[],missing=new Set(),conflicts=[];
+    entries.forEach(x=>{
+      const name=normalizeExcelStaffName(x.staffName);
+      const row=rowMap[name];
+      if(!row){missing.add(x.staffName);return}
+      const col=x.day+1; // B列=1日
+      const cell=sheet.cell(row,col);
+      const value=requestToExcelText(x);
+      const existing=cell.value();
+      const formula=cell.formula();
+      const occupied=!!formula||(existing!==undefined&&existing!==null&&String(existing)!=="");
+      if(occupied&&String(existing)!==value)conflicts.push({name:x.staffName,day:x.day,existing:String(existing??""),value});
+      writes.push({cell,value});
+    });
+
+    if(conflicts.length){
+      const ok=confirm(`${conflicts.length}件、すでに文字やシフトが入っているセルがあります。\n上書きして希望を反映しますか？\n\n手入力済みのシフトを残したい場合は「キャンセル」を押して、まだシフトを入れていない元Excelを選んでください。`);
+      if(!ok){showMessage("Excelへの反映を中止しました。","error");return}
+    }
+
+    writes.forEach(w=>w.cell.value(w.value));
+
+    const blob=await workbook.outputAsync();
+    const base=file.name.replace(/\.xlsx$/i,"");
+    downloadBlob(blob,`${base}_${month}月希望反映済み.xlsx`);
+
+    const miss=missing.size?`／Excelに氏名が見つからなかった人：${[...missing].join("、")}`:"";
+    showMessage(`${sheetName}へ${writes.length}件の希望を反映しました。${miss}`,missing.size?"error":"ok");
+  }catch(e){
+    console.error(e);
+    showMessage("Excelへ反映できませんでした："+(e&&e.message?e.message:String(e)),"error");
+  }finally{
+    excelReflectBtn.disabled=!excelFile.files.length;
+    excelReflectBtn.textContent="この月の希望をExcelへ反映";
+  }
+};
+
 $("prevMonth").onclick=async()=>{currentDate.setMonth(currentDate.getMonth()-1);selectedDates.clear();closeEdit();await loadSchedule()};
 $("nextMonth").onclick=async()=>{currentDate.setMonth(currentDate.getMonth()+1);selectedDates.clear();closeEdit();await loadSchedule()};
 
