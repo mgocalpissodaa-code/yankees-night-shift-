@@ -217,7 +217,7 @@
         日勤3名は休み希望だけ、夜勤4名は希望入力済みの職員だけ勤務可能日を反映します。
       </div>
       <div class="excel-box">
-        <label for="excelFile">未加工の ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（値だけ反映・改行なし）</span></label>
+        <label for="excelFile">未加工の ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（勤務時間2段修正）</span></label>
         <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
       </div>
@@ -375,13 +375,13 @@
     return x[value] || "";
   }
   function excelPattern(value) {
-    // 原本側で表示・色・折り返しを管理する。
-    // Web側は勤務時間の文字だけを1行で入れる。
+    // Excelでは開始時刻と終了時刻を必ず2段で表示する。
+    // セルの値には改行(LF)だけを入れ、原本の色・条件付き書式は触らない。
     const x={
-      "22:00-03:00":"22:00-3:00",
-      "22:00-06:00":"22:00-6:00",
-      "07:00-06:00":"7:00-6:00",
-      "07:00-10:00":"7:00-10:00"
+      "22:00-03:00":"22:00\n3:00",
+      "22:00-06:00":"22:00\n6:00",
+      "07:00-06:00":"7:00\n6:00",
+      "07:00-10:00":"7:00\n10:00"
     };
     return x[value] || "";
   }
