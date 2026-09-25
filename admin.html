@@ -178,6 +178,9 @@
         </div>
       </div>
       <div id="selectedInfo" class="selected-info">日付を選択してください</div>
+      <button id="bulkCancelBtn" class="danger full" style="margin-top:10px;" disabled>
+        選択した登録をまとめて取り消す
+      </button>
     </div>
 
     <div class="card">
@@ -280,6 +283,7 @@
   const staffSelect = document.getElementById("staffSelect");
   const adminPatternSelect = document.getElementById("adminPatternSelect");
   const registerBtn = document.getElementById("registerBtn");
+  const bulkCancelBtn = document.getElementById("bulkCancelBtn");
   const selectedInfo = document.getElementById("selectedInfo");
   const monthTitle = document.getElementById("monthTitle");
   const calendar = document.getElementById("calendar");
@@ -529,15 +533,39 @@
   function updateRegisterArea() {
     const staff=staffs.find(s=>String(s.id)===String(staffSelect.value));
     const dates=Array.from(selectedDates);
-    if (!staff) { selectedInfo.textContent="先に職員名を選択してください"; registerBtn.disabled=true; return; }
-    if (!dates.length) { selectedInfo.textContent="日付を選択してください"; registerBtn.disabled=true; return; }
+
+    if (!staff) {
+      selectedInfo.textContent="先に職員名を選択してください";
+      registerBtn.disabled=true;
+      bulkCancelBtn.disabled=true;
+      bulkCancelBtn.textContent="選択した登録をまとめて取り消す";
+      return;
+    }
+
+    if (!dates.length) {
+      selectedInfo.textContent="日付を選択してください";
+      registerBtn.disabled=true;
+      bulkCancelBtn.disabled=true;
+      bulkCancelBtn.textContent="選択した登録をまとめて取り消す";
+      return;
+    }
+
     const pattern=adminPatternSelect.value;
     const targets=dates.filter(d=>{
       const own=(schedule[d]||[]).find(p=>String(p.staffId)===String(staff.id));
       return !own || own.shiftPattern!==pattern;
     });
-    selectedInfo.textContent=targets.length+"日を登録・変更";
+    const ownDates=dates.filter(d=>
+      (schedule[d]||[]).some(p=>String(p.staffId)===String(staff.id))
+    );
+
+    selectedInfo.textContent=
+      dates.length+"日選択中 / 登録・変更 "+targets.length+"日 / 取消 "+ownDates.length+"日";
     registerBtn.disabled=!targets.length || !pattern;
+    bulkCancelBtn.disabled=ownDates.length===0;
+    bulkCancelBtn.textContent=ownDates.length
+      ? "選択した登録をまとめて取り消す（"+ownDates.length+"日）"
+      : "選択した登録をまとめて取り消す";
   }
 
   async function registerOne(staffId,workDate,pattern) {
@@ -615,6 +643,41 @@
     }
     selectedDates.clear(); await loadSchedule(); registerBtn.textContent="選択した日に登録";
     showMessage(failed===0 ? success+"日分を登録しました。" : success+"日登録、"+failed+"日は登録できませんでした。",failed===0?"ok":"error");
+  });
+
+  bulkCancelBtn.addEventListener("click",async()=>{
+    const staff=staffs.find(s=>String(s.id)===String(staffSelect.value));
+    if (!staff) return;
+
+    const dates=Array.from(selectedDates).filter(d=>
+      (schedule[d]||[]).some(p=>String(p.staffId)===String(staff.id))
+    );
+    if (!dates.length) return;
+
+    const name=displayStaffName(staff.name);
+    if (!confirm(name+"さんの登録を"+dates.length+"日分まとめて取り消しますか？")) return;
+
+    bulkCancelBtn.disabled=true;
+    registerBtn.disabled=true;
+    const originalText=bulkCancelBtn.textContent;
+    bulkCancelBtn.textContent="取消中...";
+
+    let success=0, failed=0;
+    for (const d of dates) {
+      const r=await cancelOne(staff.id,d);
+      if (r.error) failed++; else success++;
+    }
+
+    selectedDates.clear();
+    await loadSchedule();
+    bulkCancelBtn.textContent=originalText;
+
+    showMessage(
+      failed===0
+        ? success+"日分をまとめて取り消しました。"
+        : success+"日分を取り消しました。"+failed+"日は取り消せませんでした。",
+      failed===0 ? "ok" : "error"
+    );
   });
 
   editStaff.addEventListener("change",()=>{
