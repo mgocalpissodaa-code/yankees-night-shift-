@@ -185,8 +185,38 @@
     return String(name || "").replace(/[\s　]+/g, "").replace(/\([^)]*\)/g, "").trim();
   }
 
+  const STAFF_NAME_ALIASES = {
+    "藤井":"藤井亮輔",
+    "桑原":"桑原莉子",
+    "古垣":"古垣竜也",
+    "内藤":"内藤昌子",
+    "前川":"前川良司",
+    "鹿島":"鹿島佑斗",
+    "鎌田":"鎌田フサ子"
+  };
+
+  const STAFF_DISPLAY_NAMES = {
+    "藤井亮輔":"藤井",
+    "桑原莉子":"桑原",
+    "古垣竜也":"古垣",
+    "内藤昌子":"内藤",
+    "前川良司":"前川",
+    "鹿島佑斗":"鹿島",
+    "鎌田フサ子":"鎌田"
+  };
+
+  function canonicalStaffName(name) {
+    const key = normalizeStaffName(name);
+    return STAFF_NAME_ALIASES[key] || key;
+  }
+
+  function displayStaffName(name) {
+    const key = canonicalStaffName(name);
+    return STAFF_DISPLAY_NAMES[key] || name;
+  }
+
   function getRuleByName(name) {
-    return STAFF_RULES[normalizeStaffName(name)] || null;
+    return STAFF_RULES[canonicalStaffName(name)] || null;
   }
 
   function selectedStaff() {
@@ -260,7 +290,7 @@
     staffs.forEach(staff => {
       const option = document.createElement("option");
       option.value = staff.id;
-      option.textContent = staff.name;
+      option.textContent = displayStaffName(staff.name);
       staffSelect.appendChild(option);
     });
   }
@@ -382,7 +412,7 @@
         <div class="date-num ${dateClass}">${day}</div>
         <div class="count">${assigned.length}人登録</div>
         ${assigned.map(person =>
-          `<div class="staff-name">${person.staffName} ${patternLabel(person.shiftPattern)}</div>`
+          `<div class="staff-name">${displayStaffName(person.staffName)} ${patternLabel(person.shiftPattern)}</div>`
         ).join("")}
         ${isSelected ? '<div class="selected-mark">✓ 選択中</div>' : ""}
       `;
