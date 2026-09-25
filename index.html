@@ -147,18 +147,19 @@
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   const STAFF_RULES = {
-    "藤井亮輔": { mode:"off", title:"休み希望", options:[{value:"OFF", label:"休み希望"}] },
-    "桑原莉子": { mode:"off", title:"休み希望", options:[{value:"OFF", label:"休み希望"}] },
-    "古垣竜也": { mode:"off", title:"休み希望", options:[{value:"OFF", label:"休み希望"}] },
-    "内藤昌子": { mode:"work", title:"働ける日", options:[{value:"22:00-03:00", label:"22:00〜3:00"}] },
-    "前川良司": { mode:"work", title:"働ける日", options:[{value:"22:00-06:00", label:"22:00〜6:00"}] },
-    "鹿島佑斗": { mode:"work", title:"働ける日", options:[{value:"22:00-06:00", label:"22:00〜6:00"}] },
+    "藤井亮輔": { mode:"off", title:"休み希望 / 有給", options:[{value:"OFF", label:"休み希望"},{value:"PAID", label:"有給"}] },
+    "桑原莉子": { mode:"off", title:"休み希望 / 有給", options:[{value:"OFF", label:"休み希望"},{value:"PAID", label:"有給"}] },
+    "古垣竜也": { mode:"off", title:"休み希望 / 有給", options:[{value:"OFF", label:"休み希望"},{value:"PAID", label:"有給"}] },
+    "内藤昌子": { mode:"work", title:"働ける日 / 有給", options:[{value:"22:00-03:00", label:"22:00〜翌3:00"},{value:"PAID", label:"有給"}] },
+    "前川良司": { mode:"work", title:"働ける日 / 有給", options:[{value:"22:00-06:00", label:"22:00〜翌6:00"},{value:"PAID", label:"有給"}] },
+    "鹿島佑斗": { mode:"work", title:"働ける日 / 有給", options:[{value:"22:00-06:00", label:"22:00〜翌6:00"},{value:"PAID", label:"有給"}] },
     "鎌田フサ子": {
-      mode:"work", title:"働ける日",
+      mode:"work", title:"働ける日 / 有給",
       options:[
-        {value:"22:00-06:00", label:"22:00〜6:00"},
-        {value:"07:00-06:00", label:"7:00〜6:00"},
-        {value:"07:00-10:00", label:"7:00〜10:00"}
+        {value:"22:00-06:00", label:"22:00〜翌6:00"},
+        {value:"07:00-06:00", label:"7:00〜翌6:00"},
+        {value:"07:00-10:00", label:"7:00〜10:00"},
+        {value:"PAID", label:"有給"}
       ]
     }
   };
@@ -238,9 +239,10 @@
   function patternLabel(value) {
     const labels = {
       "OFF":"休",
-      "22:00-03:00":"22-3",
-      "22:00-06:00":"22-6",
-      "07:00-06:00":"7-6",
+      "PAID":"有給",
+      "22:00-03:00":"22-翌3",
+      "22:00-06:00":"22-翌6",
+      "07:00-06:00":"7-翌6",
       "07:00-10:00":"7-10"
     };
     return labels[value] || "";
