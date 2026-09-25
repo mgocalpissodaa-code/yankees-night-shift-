@@ -213,7 +213,8 @@
       <h2>Excelへ反映</h2>
       <div class="sub">
         今後は「★原本.xlsx」を使います。原本の数式・祝日シート・書式はそのまま残し、
-        日勤3名の休み希望と夜勤4名の勤務欄だけを反映します。表示中の年月も原本へ自動で合わせます。
+        日勤3名は休み希望だけ、夜勤4名は希望入力済みの職員だけ勤務可能日を反映します。
+        表示中の年月も原本へ自動で合わせます。
       </div>
       <div class="excel-box">
         <label for="excelFile">ヤンキース ★原本.xlsx</label>
@@ -867,9 +868,14 @@
     const sheetFile=zip.file(path);
     if (!sheetFile) throw new Error("シフトシート本体が見つかりません。");
 
+    const stylesFile=zip.file("xl/styles.xml");
+    if (!stylesFile) throw new Error("Excelの書式情報が見つかりません。");
+
     return {
       workbookDoc,
       workbookPath:"xl/workbook.xml",
+      stylesPath:"xl/styles.xml",
+      stylesDoc:parseXml(await stylesFile.async("string"),"styles.xml"),
       sheetName:main.getAttribute("name"),
       sheetPath:path,
       sheetDoc:parseXml(await sheetFile.async("string"),"シフトシート")
@@ -959,8 +965,113 @@
     cell.appendChild(v);
   }
 
-  function setXmlText(sheetDoc,address,text) {
+  function ensureWrappedCellStyle(stylesDoc,cell,cache) {
+    const current=Number(cell.getAttribute("s") || "0");
+    if (cache.has(current)) {
+      cell.setAttribute("s",String(cache.get(current)));
+      return;
+    }
+
+    const cellXfs=stylesDoc.getElementsByTagName("cellXfs")[0];
+    if (!cellXfs) throw new Error("Excelのセル書式を確認できません。");
+
+    const xfs=Array.from(cellXfs.children).filter(x=>x.localName==="xf");
+    const base=xfs[current];
+    if (!base) throw new Error("Excelのセル書式番号を確認できません。");
+
+    let alignment=Array.from(base.children).find(x=>x.localName==="alignment");
+    if (alignment && alignment.getAttribute("wrapText")==="1") {
+      cache.set(current,current);
+      return;
+    }
+
+    const clone=base.cloneNode(true);
+    alignment=Array.from(clone.children).find(x=>x.localName==="alignment");
+
+    if (!alignment) {
+      const ns=stylesDoc.documentElement.namespaceURI;
+      alignment=stylesDoc.createElementNS(ns,"alignment");
+      clone.appendChild(alignment);
+    }
+
+    alignment.setAttribute("wrapText","1");
+    clone.setAttribute("applyAlignment","1");
+    cellXfs.appendChild(clone);
+
+    const newIndex=Array.from(cellXfs.children).filter(x=>x.localName==="xf").length-1;
+    cellXfs.setAttribute("count",String(newIndex+1));
+    cache.set(current,newIndex);
+    cell.setAttribute("s",String(newIndex));
+  }
+
+  function ensureBlackTimeConditionalFormatting(sheetDoc,stylesDoc) {
+    const existingFormulas=Array.from(sheetDoc.getElementsByTagName("formula"))
+      .map(f=>(f.textContent || "").replace(/\s+/g,""));
+
+    const marker1='ISNUMBER(SEARCH(":",B5))'.replace(/\s+/g,"");
+    const marker2='ISNUMBER(SEARCH(":",B13))'.replace(/\s+/g,"");
+
+    if (existingFormulas.includes(marker1) && existingFormulas.includes(marker2)) return;
+
+    const stylesNs=stylesDoc.documentElement.namespaceURI;
+    let dxfs=stylesDoc.getElementsByTagName("dxfs")[0];
+    if (!dxfs) {
+      dxfs=stylesDoc.createElementNS(stylesNs,"dxfs");
+      dxfs.setAttribute("count","0");
+      stylesDoc.documentElement.appendChild(dxfs);
+    }
+
+    const dxf=stylesDoc.createElementNS(stylesNs,"dxf");
+    const font=stylesDoc.createElementNS(stylesNs,"font");
+    const color=stylesDoc.createElementNS(stylesNs,"color");
+    color.setAttribute("rgb","FF000000");
+    font.appendChild(color);
+    dxf.appendChild(font);
+    dxfs.appendChild(dxf);
+
+    const dxfId=Array.from(dxfs.children).filter(x=>x.localName==="dxf").length-1;
+    dxfs.setAttribute("count",String(dxfId+1));
+
+    const sheetNs=sheetDoc.documentElement.namespaceURI;
+    const firstExisting=Array.from(sheetDoc.documentElement.children)
+      .find(x=>x.localName==="conditionalFormatting");
+
+    function addRule(sqref,formulaText,priority) {
+      const cf=sheetDoc.createElementNS(sheetNs,"conditionalFormatting");
+      cf.setAttribute("sqref",sqref);
+
+      const rule=sheetDoc.createElementNS(sheetNs,"cfRule");
+      rule.setAttribute("type","expression");
+      rule.setAttribute("dxfId",String(dxfId));
+      rule.setAttribute("priority",String(priority));
+
+      const formula=sheetDoc.createElementNS(sheetNs,"formula");
+      formula.textContent=formulaText;
+      rule.appendChild(formula);
+      cf.appendChild(rule);
+
+      if (firstExisting) {
+        sheetDoc.documentElement.insertBefore(cf,firstExisting);
+      } else {
+        sheetDoc.documentElement.appendChild(cf);
+      }
+    }
+
+    if (!existingFormulas.includes(marker1)) {
+      addRule("B5:AF11",'ISNUMBER(SEARCH(":",B5))',1);
+    }
+    if (!existingFormulas.includes(marker2)) {
+      addRule("B13:AF19",'ISNUMBER(SEARCH(":",B13))',2);
+    }
+  }
+
+  function setXmlText(sheetDoc,address,text,options={}) {
     const cell=assertWritableShiftCell(sheetDoc,address);
+
+    if (options.wrap && options.stylesDoc && options.styleCache) {
+      ensureWrappedCellStyle(options.stylesDoc,cell,options.styleCache);
+    }
+
     clearXmlCellValue(cell);
     cell.setAttribute("t","inlineStr");
 
@@ -1046,8 +1157,11 @@
       excelStage="原本確認";
       const official=await getOfficialShiftSheet(zip);
       const sheetDoc=official.sheetDoc;
+      const stylesDoc=official.stylesDoc;
       const sharedStrings=await loadSharedStrings(zip);
+      const wrappedStyleCache=new Map();
       verifyOfficialTemplate(sheetDoc);
+      ensureBlackTimeConditionalFormatting(sheetDoc,stylesDoc);
 
       const y=currentDate.getFullYear();
       const m=currentDate.getMonth();
@@ -1098,34 +1212,58 @@
         }
       }
 
-      // 夜勤4名：働ける日以外は「公休」。
-      // 鎌田さんの7:00-10:00は上段（夜勤兼務の行）へ入れる。
-      for (const row of Object.values(nightRows)) {
+      // 夜勤4名：
+      // その月に1日でも「働ける日」を入力した職員だけ、
+      // 未選択日を「公休」として反映する。
+      // まだ希望入力が0日の職員は、未提出とみなして原本を触らない。
+      const nightSubmitted={};
+
+      for (const name of Object.keys(nightRows)) {
+        nightSubmitted[name]=false;
+        for (let day=1;day<=lastDay;day++) {
+          const key=dateKey(y,m,day);
+          if (findRegistrationByNameDate(name,key)) {
+            nightSubmitted[name]=true;
+            break;
+          }
+        }
+      }
+
+      for (const [name,row] of Object.entries(nightRows)) {
+        if (!nightSubmitted[name]) continue;
+
         for (let day=1;day<=lastDay;day++) {
           setXmlText(sheetDoc,columnForDay(day)+row,"公休");
         }
       }
-      for (let day=1;day<=lastDay;day++) {
-        setXmlText(sheetDoc,columnForDay(day)+kamadaDayRow,"公休");
-      }
 
       for (const [name,row] of Object.entries(nightRows)) {
+        if (!nightSubmitted[name]) continue;
+
         for (let day=1;day<=lastDay;day++) {
           const key=dateKey(y,m,day);
           const reg=findRegistrationByNameDate(name,key);
           if (!reg) continue;
 
           if (name==="鎌田フサ子" && reg.shiftPattern==="07:00-10:00") {
+            // 上段の兼務行は、7:00-10:00を選んだ日だけ書く。
+            // それ以外の日は管理者が手入力できるよう原本を触らない。
             setXmlText(
               sheetDoc,
               columnForDay(day)+kamadaDayRow,
-              excelPattern(reg.shiftPattern)
+              excelPattern(reg.shiftPattern),
+              {wrap:true,stylesDoc,styleCache:wrappedStyleCache}
             );
             setXmlText(sheetDoc,columnForDay(day)+row,"公休");
           } else {
             const label=excelPattern(reg.shiftPattern || defaultPatternForName(name));
             if (label) {
-              setXmlText(sheetDoc,columnForDay(day)+row,label);
+              setXmlText(
+                sheetDoc,
+                columnForDay(day)+row,
+                label,
+                {wrap:true,stylesDoc,styleCache:wrappedStyleCache}
+              );
             }
           }
         }
@@ -1147,10 +1285,10 @@
 
       markWorkbookForRecalculation(official.workbookDoc);
 
-      // 変更するのは workbook.xml とシフトシートXMLだけ。
-      // 祝日・数式・書式・コメント・印刷設定など、その他のファイルは
-      // JSZip内でそのまま保持する。
+      // 元の数式・祝日シート・コメント・印刷設定は保持し、
+      // 年月、勤務欄、必要最小限の表示書式だけ更新する。
       zip.file(official.workbookPath,serializeXml(official.workbookDoc));
+      zip.file(official.stylesPath,serializeXml(stylesDoc));
       zip.file(official.sheetPath,serializeXml(sheetDoc));
 
       excelStage="Excel保存";
