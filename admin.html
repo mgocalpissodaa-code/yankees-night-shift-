@@ -277,18 +277,19 @@
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   const STAFF_RULES = {
-    "藤井亮輔": { mode:"off", title:"休み希望", options:[{value:"OFF",label:"休み希望"}] },
-    "桑原莉子": { mode:"off", title:"休み希望", options:[{value:"OFF",label:"休み希望"}] },
-    "古垣竜也": { mode:"off", title:"休み希望", options:[{value:"OFF",label:"休み希望"}] },
-    "内藤昌子": { mode:"work", title:"働ける日", options:[{value:"22:00-03:00",label:"22:00〜3:00"}] },
-    "前川良司": { mode:"work", title:"働ける日", options:[{value:"22:00-06:00",label:"22:00〜6:00"}] },
-    "鹿島佑斗": { mode:"work", title:"働ける日", options:[{value:"22:00-06:00",label:"22:00〜6:00"}] },
+    "藤井亮輔": { mode:"off", title:"休み希望 / 有給", options:[{value:"OFF",label:"休み希望"},{value:"PAID",label:"有給"}] },
+    "桑原莉子": { mode:"off", title:"休み希望 / 有給", options:[{value:"OFF",label:"休み希望"},{value:"PAID",label:"有給"}] },
+    "古垣竜也": { mode:"off", title:"休み希望 / 有給", options:[{value:"OFF",label:"休み希望"},{value:"PAID",label:"有給"}] },
+    "内藤昌子": { mode:"work", title:"働ける日 / 有給", options:[{value:"22:00-03:00",label:"22:00〜翌3:00"},{value:"PAID",label:"有給"}] },
+    "前川良司": { mode:"work", title:"働ける日 / 有給", options:[{value:"22:00-06:00",label:"22:00〜翌6:00"},{value:"PAID",label:"有給"}] },
+    "鹿島佑斗": { mode:"work", title:"働ける日 / 有給", options:[{value:"22:00-06:00",label:"22:00〜翌6:00"},{value:"PAID",label:"有給"}] },
     "鎌田フサ子": {
-      mode:"work", title:"働ける日",
+      mode:"work", title:"働ける日 / 有給",
       options:[
-        {value:"22:00-06:00",label:"22:00〜6:00"},
-        {value:"07:00-06:00",label:"7:00〜6:00"},
-        {value:"07:00-10:00",label:"7:00〜10:00"}
+        {value:"22:00-06:00",label:"22:00〜翌6:00"},
+        {value:"07:00-06:00",label:"7:00〜翌6:00"},
+        {value:"07:00-10:00",label:"7:00〜10:00"},
+        {value:"PAID",label:"有給"}
       ]
     }
   };
@@ -371,16 +372,23 @@
     return dateKey(d.getFullYear(),d.getMonth(),d.getDate());
   }
   function patternLabel(value) {
-    const x={"OFF":"休","22:00-03:00":"22-3","22:00-06:00":"22-6","07:00-06:00":"7-6","07:00-10:00":"7-10"};
+    const x={
+      "OFF":"休",
+      "PAID":"有給",
+      "22:00-03:00":"22-翌3",
+      "22:00-06:00":"22-翌6",
+      "07:00-06:00":"7-翌6",
+      "07:00-10:00":"7-10"
+    };
     return x[value] || "";
   }
   function excelPattern(value) {
     // Excelでは開始時刻と終了時刻を必ず2段で表示する。
     // セルの値には改行(LF)だけを入れ、原本の色・条件付き書式は触らない。
     const x={
-      "22:00-03:00":"22:00\n3:00",
-      "22:00-06:00":"22:00\n6:00",
-      "07:00-06:00":"7:00\n6:00",
+      "22:00-03:00":"22:00\n翌3:00",
+      "22:00-06:00":"22:00\n翌6:00",
+      "07:00-06:00":"7:00\n翌6:00",
       "07:00-10:00":"7:00\n10:00"
     };
     return x[value] || "";
@@ -1400,6 +1408,13 @@
               columnForDay(day)+row,
               "公休"
             );
+          } else if (reg && reg.shiftPattern==="PAID") {
+            sheetXml=setRawText(
+              sheetXml,
+              sheetDoc,
+              columnForDay(day)+row,
+              "有給"
+            );
           }
         }
       }
@@ -1427,7 +1442,9 @@
         for (const item of registrations) {
           const address=columnForDay(item.day)+row;
 
-          if (name==="鎌田フサ子" && item.reg.shiftPattern==="07:00-10:00") {
+          if (item.reg.shiftPattern==="PAID") {
+            sheetXml=setRawText(sheetXml,sheetDoc,address,"有給");
+          } else if (name==="鎌田フサ子" && item.reg.shiftPattern==="07:00-10:00") {
             const kamadaAddress=columnForDay(item.day)+kamadaDayRow;
             sheetXml=setRawText(
               sheetXml,
