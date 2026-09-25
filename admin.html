@@ -546,7 +546,10 @@
     });
   }
   async function cancelOne(staffId,workDate) {
-    return await client.rpc("cancel_night",{p_staff_id:staffId,p_work_date:workDate});
+    return await client.rpc("admin_cancel_shift_request",{
+      p_staff_id:staffId,
+      p_work_date:workDate
+    });
   }
 
   function openEdit(workDate,person) {
