@@ -284,11 +284,12 @@
     "前川良司": { mode:"work", title:"働ける日 / 有給", options:[{value:"22:00-06:00",label:"22:00〜翌6:00"},{value:"PAID",label:"有給"}] },
     "鹿島佑斗": { mode:"work", title:"働ける日 / 有給", options:[{value:"22:00-06:00",label:"22:00〜翌6:00"},{value:"PAID",label:"有給"}] },
     "鎌田フサ子": {
-      mode:"work", title:"働ける日 / 有給",
+      mode:"work", title:"働ける日 / 公休 / 有給",
       options:[
         {value:"22:00-06:00",label:"22:00〜翌6:00"},
         {value:"07:00-06:00",label:"7:00〜翌6:00"},
         {value:"07:00-10:00",label:"7:00〜10:00"},
+        {value:"PUBLIC_REST",label:"公休"},
         {value:"PAID",label:"有給"}
       ]
     }
@@ -374,6 +375,7 @@
   function patternLabel(value) {
     const x={
       "OFF":"休",
+      "PUBLIC_REST":"公休",
       "PAID":"有給",
       "22:00-03:00":"22-翌3",
       "22:00-06:00":"22-翌6",
@@ -1430,7 +1432,6 @@
 
         if (!registrations.length) continue;
 
-        // 夜勤者は、希望入力がある月だけ未選択日を「公休」で埋める。
         for (let day=1;day<=lastDay;day++) {
           sheetXml=setRawText(
             sheetXml,
@@ -1440,31 +1441,14 @@
           );
         }
 
-        // 鎌田さんはPDFの実際のシフト表と同じく、
-        // 上段の「鎌田 フサ子（夜勤兼務）」にも公休・勤務を反映する。
-        if (name==="鎌田フサ子") {
-          for (let day=1;day<=lastDay;day++) {
-            sheetXml=setRawText(
-              sheetXml,
-              sheetDoc,
-              columnForDay(day)+kamadaDayRow,
-              "公休"
-            );
-          }
-        }
-
         for (const item of registrations) {
           const address=columnForDay(item.day)+row;
 
           if (item.reg.shiftPattern==="PAID") {
             sheetXml=setRawText(sheetXml,sheetDoc,address,"有給");
-            if (name==="鎌田フサ子") {
-              const kamadaAddress=columnForDay(item.day)+kamadaDayRow;
-              sheetXml=setRawText(sheetXml,sheetDoc,kamadaAddress,"有給");
-            }
+          } else if (name==="鎌田フサ子" && item.reg.shiftPattern==="PUBLIC_REST") {
+            sheetXml=setRawText(sheetXml,sheetDoc,address,"公休");
           } else if (name==="鎌田フサ子" && item.reg.shiftPattern==="07:00-10:00") {
-            // 7:00〜10:00 は夜勤兼務の上段だけに勤務時間、
-            // 下段の夜勤欄は公休のままにする。
             const kamadaAddress=columnForDay(item.day)+kamadaDayRow;
             sheetXml=setRawText(
               sheetXml,
@@ -1481,14 +1465,6 @@
             if (label) {
               sheetXml=setRawText(sheetXml,sheetDoc,address,label);
               timeCells.push(address);
-
-              // 鎌田さんの夜勤（22:00〜翌6:00 / 7:00〜翌6:00）は、
-              // PDFどおり上段の夜勤兼務にも同じ勤務時間を反映する。
-              if (name==="鎌田フサ子") {
-                const kamadaAddress=columnForDay(item.day)+kamadaDayRow;
-                sheetXml=setRawText(sheetXml,sheetDoc,kamadaAddress,label);
-                timeCells.push(kamadaAddress);
-              }
             }
           }
         }
