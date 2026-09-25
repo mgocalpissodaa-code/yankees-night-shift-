@@ -104,6 +104,26 @@
     .count-summary-name { font-size:14px; font-weight:800; margin-bottom:4px; word-break:break-all; }
     .count-summary-days { font-size:20px; font-weight:900; color:#2563eb; }
     .excel-box { padding:12px; border-radius:12px; background:#f8fafc; margin-top:10px; }
+    .bulk-cancel-bar {
+      position:fixed;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:max(10px, env(safe-area-inset-bottom));
+      width:min(calc(100% - 20px), 880px);
+      z-index:60;
+      background:rgba(255,255,255,.98);
+      border:1px solid #fecaca;
+      border-radius:16px;
+      padding:10px;
+      box-shadow:0 8px 28px rgba(0,0,0,.18);
+    }
+    .bulk-cancel-info {
+      text-align:center;
+      font-size:13px;
+      font-weight:800;
+      color:#991b1b;
+      margin-bottom:7px;
+    }
     @media (max-width:600px) {
       .app { padding-left:6px; padding-right:6px; }
       .card { padding:11px 7px; }
@@ -178,9 +198,6 @@
         </div>
       </div>
       <div id="selectedInfo" class="selected-info">日付を選択してください</div>
-      <button id="bulkCancelBtn" class="danger full" style="margin-top:10px;" disabled>
-        選択した登録をまとめて取り消す
-      </button>
     </div>
 
     <div class="card">
@@ -193,7 +210,6 @@
       <div class="sub">
         現在表示している月の希望を、ヤンキースのシフト原本へ反映して新しいExcelを作ります。
         日勤3名は休み希望日に「公休」、夜勤4名は働けない日を「公休」、働ける日は勤務時間で反映します。
-        安庭・宮路の行は変更しません。
       </div>
       <div class="excel-box">
         <label for="excelFile">ヤンキースのシフト原本（.xlsx）</label>
@@ -238,6 +254,13 @@
         <button id="cancelRegistrationBtn" class="danger">この登録を取り消す</button>
       </div>
       <button id="closeEditBtn" class="secondary full" style="margin-top:10px;">閉じる</button>
+    </div>
+
+    <div id="bulkCancelBar" class="bulk-cancel-bar hidden">
+      <div id="bulkCancelBarInfo" class="bulk-cancel-info"></div>
+      <button id="bulkCancelBtn" class="danger full" disabled>
+        選択した登録をまとめて取り消す
+      </button>
     </div>
   </div>
 </div>
@@ -284,6 +307,8 @@
   const adminPatternSelect = document.getElementById("adminPatternSelect");
   const registerBtn = document.getElementById("registerBtn");
   const bulkCancelBtn = document.getElementById("bulkCancelBtn");
+  const bulkCancelBar = document.getElementById("bulkCancelBar");
+  const bulkCancelBarInfo = document.getElementById("bulkCancelBarInfo");
   const selectedInfo = document.getElementById("selectedInfo");
   const monthTitle = document.getElementById("monthTitle");
   const calendar = document.getElementById("calendar");
@@ -538,7 +563,7 @@
       selectedInfo.textContent="先に職員名を選択してください";
       registerBtn.disabled=true;
       bulkCancelBtn.disabled=true;
-      bulkCancelBtn.textContent="選択した登録をまとめて取り消す";
+      bulkCancelBar.classList.add("hidden");
       return;
     }
 
@@ -546,7 +571,7 @@
       selectedInfo.textContent="日付を選択してください";
       registerBtn.disabled=true;
       bulkCancelBtn.disabled=true;
-      bulkCancelBtn.textContent="選択した登録をまとめて取り消す";
+      bulkCancelBar.classList.add("hidden");
       return;
     }
 
@@ -562,10 +587,17 @@
     selectedInfo.textContent=
       dates.length+"日選択中 / 登録・変更 "+targets.length+"日 / 取消 "+ownDates.length+"日";
     registerBtn.disabled=!targets.length || !pattern;
-    bulkCancelBtn.disabled=ownDates.length===0;
-    bulkCancelBtn.textContent=ownDates.length
-      ? "選択した登録をまとめて取り消す（"+ownDates.length+"日）"
-      : "選択した登録をまとめて取り消す";
+
+    if (ownDates.length > 0) {
+      const name=displayStaffName(staff.name);
+      bulkCancelBarInfo.textContent=name+"さんの登録を "+ownDates.length+"日 選択中";
+      bulkCancelBtn.disabled=false;
+      bulkCancelBtn.textContent="選択した登録をまとめて取り消す（"+ownDates.length+"日）";
+      bulkCancelBar.classList.remove("hidden");
+    } else {
+      bulkCancelBtn.disabled=true;
+      bulkCancelBar.classList.add("hidden");
+    }
   }
 
   async function registerOne(staffId,workDate,pattern) {
@@ -610,7 +642,7 @@
   adminPassword.addEventListener("keydown",e=>{if(e.key==="Enter")loginBtn.click();});
   logoutBtn.addEventListener("click",async()=>{
     await client.auth.signOut(); adminView.classList.add("hidden"); loginView.classList.remove("hidden");
-    selectedDates.clear(); closeEdit();
+    selectedDates.clear(); closeEdit(); bulkCancelBar.classList.add("hidden");
   });
 
   addStaffBtn.addEventListener("click",async()=>{
