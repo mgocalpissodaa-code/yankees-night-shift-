@@ -1004,14 +1004,20 @@
     cell.setAttribute("s",String(newIndex));
   }
 
-  function ensureBlackTimeConditionalFormatting(sheetDoc,stylesDoc) {
-    const existingFormulas=Array.from(sheetDoc.getElementsByTagName("formula"))
+  function ensureShiftColorConditionalFormatting(sheetDoc,stylesDoc) {
+    const formulas=Array.from(sheetDoc.getElementsByTagName("formula"))
       .map(f=>(f.textContent || "").replace(/\s+/g,""));
 
-    const marker1='ISNUMBER(SEARCH(":",B5))'.replace(/\s+/g,"");
-    const marker2='ISNUMBER(SEARCH(":",B13))'.replace(/\s+/g,"");
+    // すでにこのアプリの色ルールが入っているファイルなら重複追加しない。
+    const marker='OR(ISNUMBER(SEARCH("有休",B6)),ISNUMBER(SEARCH("有給",B6)))'
+      .replace(/\s+/g,"");
+    if (formulas.includes(marker)) return;
 
-    if (existingFormulas.includes(marker1) && existingFormulas.includes(marker2)) return;
+    // 既存の土日祝ルールより、勤務・有休・公休の色を優先する。
+    Array.from(sheetDoc.getElementsByTagName("cfRule")).forEach(rule=>{
+      const current=Number(rule.getAttribute("priority") || "100");
+      rule.setAttribute("priority",String(current+30));
+    });
 
     const stylesNs=stylesDoc.documentElement.namespaceURI;
     let dxfs=stylesDoc.getElementsByTagName("dxfs")[0];
@@ -1021,22 +1027,51 @@
       stylesDoc.documentElement.appendChild(dxfs);
     }
 
-    const dxf=stylesDoc.createElementNS(stylesNs,"dxf");
-    const font=stylesDoc.createElementNS(stylesNs,"font");
-    const color=stylesDoc.createElementNS(stylesNs,"color");
-    color.setAttribute("rgb","FF000000");
-    font.appendChild(color);
-    dxf.appendChild(font);
-    dxfs.appendChild(dxf);
+    function addDxf(fillRgb=null) {
+      const dxf=stylesDoc.createElementNS(stylesNs,"dxf");
 
-    const dxfId=Array.from(dxfs.children).filter(x=>x.localName==="dxf").length-1;
-    dxfs.setAttribute("count",String(dxfId+1));
+      const font=stylesDoc.createElementNS(stylesNs,"font");
+      const fontColor=stylesDoc.createElementNS(stylesNs,"color");
+      fontColor.setAttribute("rgb","FF000000");
+      font.appendChild(fontColor);
+      dxf.appendChild(font);
+
+      if (fillRgb) {
+        const fill=stylesDoc.createElementNS(stylesNs,"fill");
+        const pattern=stylesDoc.createElementNS(stylesNs,"patternFill");
+        pattern.setAttribute("patternType","solid");
+
+        const fg=stylesDoc.createElementNS(stylesNs,"fgColor");
+        fg.setAttribute("rgb",fillRgb);
+        pattern.appendChild(fg);
+
+        const bg=stylesDoc.createElementNS(stylesNs,"bgColor");
+        bg.setAttribute("indexed","64");
+        pattern.appendChild(bg);
+
+        fill.appendChild(pattern);
+        dxf.appendChild(fill);
+      }
+
+      dxfs.appendChild(dxf);
+      const id=Array.from(dxfs.children).filter(x=>x.localName==="dxf").length-1;
+      dxfs.setAttribute("count",String(id+1));
+      return id;
+    }
+
+    // 添付のヤンキース10月シフトに合わせた色
+    // 日勤 = 黄橙、通常夜勤 = 薄紫、7時～翌6時 = 紫、有休/有給 = ピンク
+    const orangeDxf=addDxf("FFFFC000");
+    const nightDxf=addDxf("FFCCCCFF");
+    const longNightDxf=addDxf("FFCC99FF");
+    const paidLeaveDxf=addDxf("FFFF6699");
+    const blackOnlyDxf=addDxf(null);
 
     const sheetNs=sheetDoc.documentElement.namespaceURI;
     const firstExisting=Array.from(sheetDoc.documentElement.children)
       .find(x=>x.localName==="conditionalFormatting");
 
-    function addRule(sqref,formulaText,priority) {
+    function addRule(sqref,formulaText,dxfId,priority,stopIfTrue=true) {
       const cf=sheetDoc.createElementNS(sheetNs,"conditionalFormatting");
       cf.setAttribute("sqref",sqref);
 
@@ -1044,6 +1079,7 @@
       rule.setAttribute("type","expression");
       rule.setAttribute("dxfId",String(dxfId));
       rule.setAttribute("priority",String(priority));
+      if (stopIfTrue) rule.setAttribute("stopIfTrue","1");
 
       const formula=sheetDoc.createElementNS(sheetNs,"formula");
       formula.textContent=formulaText;
@@ -1057,12 +1093,69 @@
       }
     }
 
-    if (!existingFormulas.includes(marker1)) {
-      addRule("B5:AF11",'ISNUMBER(SEARCH(":",B5))',1);
-    }
-    if (!existingFormulas.includes(marker2)) {
-      addRule("B13:AF19",'ISNUMBER(SEARCH(":",B13))',2);
-    }
+    let p=1;
+
+    // 有休・有給：ピンク背景＋黒文字
+    addRule(
+      "B6:AF11",
+      'OR(ISNUMBER(SEARCH("有休",B6)),ISNUMBER(SEARCH("有給",B6)))',
+      paidLeaveDxf,p++
+    );
+    addRule(
+      "B14:AF17",
+      'OR(ISNUMBER(SEARCH("有休",B14)),ISNUMBER(SEARCH("有給",B14)))',
+      paidLeaveDxf,p++
+    );
+
+    // 公休：文字は必ず黒。土日祝の文字色ルールより優先。
+    addRule(
+      "B6:AF11",
+      'ISNUMBER(SEARCH("公休",B6))',
+      blackOnlyDxf,p++
+    );
+    addRule(
+      "B14:AF17",
+      'ISNUMBER(SEARCH("公休",B14))',
+      blackOnlyDxf,p++
+    );
+
+    // 日勤職員：時間が入ったら黄橙背景＋黒文字
+    addRule(
+      "B6:AF10",
+      'ISNUMBER(SEARCH(":",B6))',
+      orangeDxf,p++
+    );
+
+    // 鎌田さん上段（夜勤兼務）
+    // 7:00～翌6:00 は濃い紫、22:00～6:00 は薄紫、
+    // 7:00～10:00 など日勤時間は黄橙。
+    addRule(
+      "B11:AF11",
+      'AND(ISNUMBER(SEARCH(":",B11)),LEFT(B11,4)="7:00",ISNUMBER(SEARCH("6:00",B11)))',
+      longNightDxf,p++
+    );
+    addRule(
+      "B11:AF11",
+      'AND(ISNUMBER(SEARCH(":",B11)),LEFT(B11,5)="22:00")',
+      nightDxf,p++
+    );
+    addRule(
+      "B11:AF11",
+      'ISNUMBER(SEARCH(":",B11))',
+      orangeDxf,p++
+    );
+
+    // 夜勤者：通常夜勤は薄紫。鎌田さんの7:00～翌6:00だけ濃い紫。
+    addRule(
+      "B14:AF17",
+      'AND(ISNUMBER(SEARCH(":",B14)),LEFT(B14,4)="7:00",ISNUMBER(SEARCH("6:00",B14)))',
+      longNightDxf,p++
+    );
+    addRule(
+      "B14:AF17",
+      'ISNUMBER(SEARCH(":",B14))',
+      nightDxf,p++
+    );
   }
 
   function setXmlText(sheetDoc,address,text,options={}) {
@@ -1161,7 +1254,7 @@
       const sharedStrings=await loadSharedStrings(zip);
       const wrappedStyleCache=new Map();
       verifyOfficialTemplate(sheetDoc);
-      ensureBlackTimeConditionalFormatting(sheetDoc,stylesDoc);
+      ensureShiftColorConditionalFormatting(sheetDoc,stylesDoc);
 
       const y=currentDate.getFullYear();
       const m=currentDate.getMonth();
