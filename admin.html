@@ -217,7 +217,7 @@
         表示中の年月も原本へ自動で合わせます。
       </div>
       <div class="excel-box">
-        <label for="excelFile">ヤンキース ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（原本ルール保持版）</span></label>
+        <label for="excelFile">ヤンキース ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（原本ルール保持版・エラー修正）</span></label>
         <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
       </div>
@@ -1064,14 +1064,22 @@
 
     // 1) 勤務欄の中央揃えスタイルを「折り返しあり」にする。
     //    Webから入れる 22:00\n3:00 等を必ず2段表示する。
-    const cellXfsRe=new RegExp("<cellXfs\\\\b[^>]*>[\\\\s\\\\S]*?<\\\\/cellXfs>");
+    const cellXfsRe=new RegExp("<cellXfs\\b[^>]*>[\\s\\S]*?<\\/cellXfs>");
     const cellXfsMatch=cellXfsRe.exec(stylesXml);
     if (!cellXfsMatch) throw new Error("Excelのセル書式を確認できません。");
 
     let cellXfs=cellXfsMatch[0]
       .replace(
-        new RegExp('<alignment horizontal="center" vertical="center"\\\\/>','g'),
-        '<alignment horizontal="center" vertical="center" wrapText="1"/>'
+        new RegExp('<alignment\\b(?=[^>]*horizontal="center")(?=[^>]*vertical="center")([^>]*)\\/>','g'),
+        (m,attrs)=> {
+          let a=attrs;
+          if (/\\bwrapText="/.test(a)) {
+            a=a.replace(/\\bwrapText="[^"]*"/,'wrapText="1"');
+          } else {
+            a+=' wrapText="1"';
+          }
+          return '<alignment'+a+'/>';
+        }
       );
 
     stylesXml=
@@ -1082,19 +1090,19 @@
     // 2) 原本の土日用dxfのうち「勤務欄」に使われるものだけ文字色を黒へ。
     //    背景色は原本の赤系/青系をそのまま残す。
     //    day: 15/16, night: 5/6。日付見出しの赤青は触らない。
-    const dxfsRe=new RegExp("<dxfs\\\\b[^>]*>[\\\\s\\\\S]*?<\\\\/dxfs>");
+    const dxfsRe=new RegExp("<dxfs\\b[^>]*>[\\s\\S]*?<\\/dxfs>");
     const dxfsMatch=dxfsRe.exec(stylesXml);
     if (!dxfsMatch) throw new Error("Excelの条件付き書式を確認できません。");
 
     const bodyWeekendDxfIds=new Set([5,6,15,16]);
     let dxfIndex=0;
     const patchedDxfs=dxfsMatch[0].replace(
-      new RegExp("<dxf\\\\b[^>]*>[\\\\s\\\\S]*?<\\\\/dxf>","g"),
+      new RegExp("<dxf\\b[^>]*>[\\s\\S]*?<\\/dxf>","g"),
       dxf=>{
         const index=dxfIndex++;
         if (!bodyWeekendDxfIds.has(index)) return dxf;
 
-        const fontRe=new RegExp("<font>[\\\\s\\\\S]*?<\\\\/font>");
+        const fontRe=new RegExp("<font>[\\s\\S]*?<\\/font>");
         if (fontRe.test(dxf)) {
           return dxf.replace(
             fontRe,
