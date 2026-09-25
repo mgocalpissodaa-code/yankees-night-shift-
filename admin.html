@@ -659,25 +659,29 @@
 
     bulkCancelBtn.disabled=true;
     registerBtn.disabled=true;
-    const originalText=bulkCancelBtn.textContent;
-    bulkCancelBtn.textContent="取消中...";
+    bulkCancelBtn.textContent="一括取消中...";
 
-    let success=0, failed=0;
-    for (const d of dates) {
-      const r=await cancelOne(staff.id,d);
-      if (r.error) failed++; else success++;
+    const result=await client.rpc("admin_bulk_cancel_shift_requests",{
+      p_staff_id:staff.id,
+      p_work_dates:dates
+    });
+
+    if (result.error) {
+      bulkCancelBtn.disabled=false;
+      updateRegisterArea();
+      showMessage("一括取消できませんでした："+result.error.message,"error");
+      return;
     }
 
     selectedDates.clear();
     await loadSchedule();
-    bulkCancelBtn.textContent=originalText;
 
-    showMessage(
-      failed===0
-        ? success+"日分をまとめて取り消しました。"
-        : success+"日分を取り消しました。"+failed+"日は取り消せませんでした。",
-      failed===0 ? "ok" : "error"
-    );
+    const deleted=
+      result.data && typeof result.data.deleted==="number"
+        ? result.data.deleted
+        : dates.length;
+
+    showMessage(deleted+"日分をまとめて取り消しました。");
   });
 
   editStaff.addEventListener("change",()=>{
