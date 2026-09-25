@@ -375,10 +375,10 @@
   }
   function excelPattern(value) {
     const x={
-      "22:00-03:00":"22:00\n3:00",
-      "22:00-06:00":"22:00\n6:00",
-      "07:00-06:00":"7:00\n6:00",
-      "07:00-10:00":"7:00\n10:00"
+      "22:00-03:00":"22:00\r\n3:00",
+      "22:00-06:00":"22:00\r\n6:00",
+      "07:00-06:00":"7:00\r\n6:00",
+      "07:00-10:00":"7:00\r\n10:00"
     };
     return x[value] || "";
   }
@@ -845,9 +845,11 @@
 
     excelExportBtn.disabled=true; excelExportBtn.textContent="Excel作成中...";
 
+    let excelStage="ファイル読込";
     try {
       const arrayBuffer=await file.arrayBuffer();
       const workbook=new ExcelJS.Workbook();
+      excelStage="Excel解析";
       await workbook.xlsx.load(arrayBuffer);
       const ws=workbook.worksheets[0];
       if (!ws) throw new Error("シートが見つかりません。");
@@ -909,6 +911,7 @@
         }
       }
 
+      excelStage="Excel保存";
       const out=await workbook.xlsx.writeBuffer();
       const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
       const url=URL.createObjectURL(blob);
@@ -919,7 +922,8 @@
       setTimeout(()=>URL.revokeObjectURL(url),1000);
       showMessage("Excelへ希望を反映しました。");
     } catch(error) {
-      showMessage("Excelへ反映できませんでした："+(error.message || error),"error");
+      console.error("Excel export failed at",excelStage,error);
+      showMessage("Excelへ反映できませんでした（"+excelStage+"）："+(error.message || error),"error");
     } finally {
       excelExportBtn.disabled=false;
       excelExportBtn.textContent="この月の希望を反映してExcel出力";
