@@ -122,8 +122,44 @@ as $func$
   order by n.work_date, s.name;
 $func$;
 
+create or replace function public.admin_cancel_shift_request(
+  p_staff_id uuid,
+  p_work_date date
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $func$
+declare
+  v_deleted integer;
+begin
+  if coalesce(auth.jwt() ->> 'email', '') <> 'admin@example.com' then
+    raise exception '管理者としてログインしてください。';
+  end if;
+
+  delete from public.night_availability
+  where staff_id = p_staff_id
+    and work_date = p_work_date;
+
+  get diagnostics v_deleted = row_count;
+
+  if v_deleted = 0 then
+    raise exception '対象の登録が見つかりません。';
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'staff_id', p_staff_id,
+    'work_date', p_work_date
+  );
+end;
+$func$;
+
 revoke all on function public.register_shift_request(uuid, date, text) from public;
 revoke all on function public.get_shift_schedule(date, date) from public;
+revoke all on function public.admin_cancel_shift_request(uuid, date) from public;
 
 grant execute on function public.register_shift_request(uuid, date, text) to anon, authenticated;
 grant execute on function public.get_shift_schedule(date, date) to anon, authenticated;
+grant execute on function public.admin_cancel_shift_request(uuid, date) to authenticated;
