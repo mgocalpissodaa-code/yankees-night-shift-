@@ -1041,12 +1041,10 @@
         const pattern=stylesDoc.createElementNS(stylesNs,"patternFill");
         pattern.setAttribute("patternType","solid");
 
-        const fg=stylesDoc.createElementNS(stylesNs,"fgColor");
-        fg.setAttribute("rgb",fillRgb);
-        pattern.appendChild(fg);
-
+        // differential style(dxf)の塗りは bgColor に色を持たせる。
+        // これでExcel側で黒塗りになる問題を避ける。
         const bg=stylesDoc.createElementNS(stylesNs,"bgColor");
-        bg.setAttribute("indexed","64");
+        bg.setAttribute("rgb",fillRgb);
         pattern.appendChild(bg);
 
         fill.appendChild(pattern);
@@ -1111,12 +1109,12 @@
     addRule(
       "B6:AF11",
       'ISNUMBER(SEARCH("公休",B6))',
-      blackOnlyDxf,p++
+      blackOnlyDxf,p++,false
     );
     addRule(
       "B14:AF17",
       'ISNUMBER(SEARCH("公休",B14))',
-      blackOnlyDxf,p++
+      blackOnlyDxf,p++,false
     );
 
     // 日勤職員：時間が入ったら黄橙背景＋黒文字
