@@ -374,8 +374,24 @@
     return x[value] || "";
   }
   function excelPattern(value) {
-    const x={"22:00-03:00":"22:00～3:00","22:00-06:00":"22:00～6:00","07:00-06:00":"7:00～6:00","07:00-10:00":"7:00～10:00"};
+    const x={
+      "22:00-03:00":"22:00\n3:00",
+      "22:00-06:00":"22:00\n6:00",
+      "07:00-06:00":"7:00\n6:00",
+      "07:00-10:00":"7:00\n10:00"
+    };
     return x[value] || "";
+  }
+
+  function setExcelShiftTime(ws,row,col,text) {
+    const cell=ws.getCell(row,col);
+    cell.value=text;
+    cell.alignment={
+      ...(cell.alignment || {}),
+      wrapText:true,
+      horizontal:"center",
+      vertical:"middle"
+    };
   }
   function defaultPatternForName(name) {
     const r=getRuleByName(name);
@@ -888,11 +904,11 @@
           if (!reg) continue;
 
           if (name==="鎌田フサ子" && reg.shiftPattern==="07:00-10:00") {
-            ws.getCell(kamadaDayRow,day+1).value=excelPattern(reg.shiftPattern);
+            setExcelShiftTime(ws,kamadaDayRow,day+1,excelPattern(reg.shiftPattern));
             ws.getCell(row,day+1).value="公休";
           } else {
             const label=excelPattern(reg.shiftPattern || defaultPatternForName(name));
-            if (label) ws.getCell(row,day+1).value=label;
+            if (label) setExcelShiftTime(ws,row,day+1,label);
           }
         }
       }
