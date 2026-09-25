@@ -217,7 +217,7 @@
         日勤3名は休み希望だけ、夜勤4名は希望入力済みの職員だけ勤務可能日を反映します。
       </div>
       <div class="excel-box">
-        <label for="excelFile">未加工の ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（勤務時間2段修正）</span></label>
+        <label for="excelFile">未加工の ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（2段表示・書式保護版）</span></label>
         <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
       </div>
@@ -1033,6 +1033,126 @@
     return result;
   }
 
+  function applyWrapStyleOnly(stylesXml,sheetXml,addresses) {
+    const unique=[...new Set(addresses)].filter(Boolean);
+    if (!unique.length) return {stylesXml,sheetXml};
+
+    const xfsRe=/<cellXfs\b([^>]*)>([\s\S]*?)<\/cellXfs>/;
+    const match=xfsRe.exec(stylesXml);
+    if (!match) throw new Error("Excelのセル書式を確認できません。");
+
+    const headerAttrs=match[1];
+    let body=match[2];
+    const xfRe=/<xf\b[^>]*(?:\/>|>[\s\S]*?<\/xf>)/g;
+    const xfs=body.match(xfRe) || [];
+    const styleMap=new Map();
+
+    function makeWrappedXf(baseId) {
+      if (styleMap.has(baseId)) return styleMap.get(baseId);
+      const base=xfs[baseId];
+      if (!base) throw new Error("Excelのセル書式 "+baseId+" を確認できません。");
+
+      // すでに折り返し有効なら元のstyleIdをそのまま使う。
+      if (/\bwrapText="1"/.test(base)) {
+        styleMap.set(baseId,baseId);
+        return baseId;
+      }
+
+      let clone=base;
+
+      // applyAlignment=1 を確実にする。
+      if (/\bapplyAlignment="/.test(clone)) {
+        clone=clone.replace(/\bapplyAlignment="[^"]*"/,'applyAlignment="1"');
+      } else {
+        clone=clone.replace(/^<xf\b/,'<xf applyAlignment="1"');
+      }
+
+      if (/<alignment\b[^>]*\/>/.test(clone)) {
+        clone=clone.replace(/<alignment\b([^>]*)\/>/, (m,attrs)=>{
+          let a=attrs;
+          if (/\bwrapText="/.test(a)) {
+            a=a.replace(/\bwrapText="[^"]*"/,'wrapText="1"');
+          } else {
+            a+=' wrapText="1"';
+          }
+          return '<alignment'+a+'/>';
+        });
+      } else if (/<alignment\b[^>]*>/.test(clone)) {
+        clone=clone.replace(/<alignment\b([^>]*)>/, (m,attrs)=>{
+          let a=attrs;
+          if (/\bwrapText="/.test(a)) {
+            a=a.replace(/\bwrapText="[^"]*"/,'wrapText="1"');
+          } else {
+            a+=' wrapText="1"';
+          }
+          return '<alignment'+a+'>';
+        });
+      } else if (/\/>$/.test(clone)) {
+        clone=clone.replace(/\/>$/,
+          '><alignment horizontal="center" vertical="center" wrapText="1"/></xf>');
+      } else {
+        clone=clone.replace('</xf>',
+          '<alignment horizontal="center" vertical="center" wrapText="1"/></xf>');
+      }
+
+      const newId=xfs.length;
+      xfs.push(clone);
+      body+=clone;
+      styleMap.set(baseId,newId);
+      return newId;
+    }
+
+    function cellStyleId(xml,address) {
+      const addr=escapeRegex(address);
+      const re=new RegExp('<c\\b(?=[^>]*\\br="'+addr+'")([^>]*)[\\/>]');
+      const m=re.exec(xml);
+      if (!m) throw new Error("原本のセル "+address+" が見つかりません。");
+      const s=/\bs="(\d+)"/.exec(m[1]);
+      return s ? Number(s[1]) : 0;
+    }
+
+    function setCellStyleId(xml,address,newId) {
+      const addr=escapeRegex(address);
+      const re=new RegExp('<c\\b(?=[^>]*\\br="'+addr+'")([^>]*)>');
+      const m=re.exec(xml);
+      if (!m) throw new Error("原本のセル "+address+" が見つかりません。");
+
+      let attrs=m[1];
+      if (/\bs="\d+"/.test(attrs)) {
+        attrs=attrs.replace(/\bs="\d+"/,'s="'+newId+'"');
+      } else {
+        attrs+=' s="'+newId+'"';
+      }
+
+      const replacement='<c'+attrs+'>';
+      return xml.slice(0,m.index)+replacement+xml.slice(m.index+m[0].length);
+    }
+
+    for (const address of unique) {
+      const baseId=cellStyleId(sheetXml,address);
+      const wrappedId=makeWrappedXf(baseId);
+      if (wrappedId!==baseId) {
+        sheetXml=setCellStyleId(sheetXml,address,wrappedId);
+      }
+    }
+
+    const newCount=xfs.length;
+    let newHeaderAttrs=headerAttrs;
+    if (/\bcount="\d+"/.test(newHeaderAttrs)) {
+      newHeaderAttrs=newHeaderAttrs.replace(/\bcount="\d+"/,'count="'+newCount+'"');
+    } else {
+      newHeaderAttrs+=' count="'+newCount+'"';
+    }
+
+    const rebuilt='<cellXfs'+newHeaderAttrs+'>'+body+'</cellXfs>';
+    stylesXml=
+      stylesXml.slice(0,match.index)+
+      rebuilt+
+      stylesXml.slice(match.index+match[0].length);
+
+    return {stylesXml,sheetXml};
+  }
+
   function markWorkbookForRecalculationRaw(workbookXml) {
     const calcRe=/<calcPr\b([^>]*)\/>/;
     const m=calcRe.exec(workbookXml);
@@ -1266,6 +1386,7 @@
       }
 
       excelStage="希望反映";
+      const timeCells=[];
 
       for (const [name,row] of Object.entries(dayRows)) {
         for (let day=1;day<=lastDay;day++) {
@@ -1306,12 +1427,14 @@
           const address=columnForDay(item.day)+row;
 
           if (name==="鎌田フサ子" && item.reg.shiftPattern==="07:00-10:00") {
+            const kamadaAddress=columnForDay(item.day)+kamadaDayRow;
             sheetXml=setRawText(
               sheetXml,
               sheetDoc,
-              columnForDay(item.day)+kamadaDayRow,
+              kamadaAddress,
               excelPattern(item.reg.shiftPattern)
             );
+            timeCells.push(kamadaAddress);
             sheetXml=setRawText(sheetXml,sheetDoc,address,"公休");
           } else {
             const label=excelPattern(
@@ -1319,6 +1442,7 @@
             );
             if (label) {
               sheetXml=setRawText(sheetXml,sheetDoc,address,label);
+              timeCells.push(address);
             }
           }
         }
@@ -1335,8 +1459,13 @@
         }
       }
 
-      // Excelの書式・色・条件付き書式・数式は一切変更しない。
-      // 未加工の原本のシフトシートで、セルの値だけを書き換える。
+      // 勤務時間が入ったセルだけ、そのセル自身の書式を複製して
+      // wrapText=1 を追加する。色・罫線・条件付き書式・数式は変更しない。
+      const wrapped=applyWrapStyleOnly(stylesXml,sheetXml,timeCells);
+      stylesXml=wrapped.stylesXml;
+      sheetXml=wrapped.sheetXml;
+
+      zip.file(official.stylesPath,stylesXml);
       zip.file(official.sheetPath,sheetXml);
 
       excelStage="Excel保存";
