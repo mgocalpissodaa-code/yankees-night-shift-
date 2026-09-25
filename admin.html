@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>ヤンキース 希望入力 管理者</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     * { box-sizing:border-box; }
     body {
@@ -212,11 +212,11 @@
     <div class="card">
       <h2>Excelへ反映</h2>
       <div class="sub">
-        現在表示している月の希望を、ヤンキースのシフト原本へ反映して新しいExcelを作ります。
-        日勤3名は休み希望日に「公休」、夜勤4名は働けない日を「公休」、働ける日は勤務時間で反映します。
+        今後は「★原本.xlsx」を使います。原本の数式・祝日シート・書式はそのまま残し、
+        日勤3名の休み希望と夜勤4名の勤務欄だけを反映します。表示中の年月も原本へ自動で合わせます。
       </div>
       <div class="excel-box">
-        <label for="excelFile">ヤンキースのシフト原本（.xlsx）</label>
+        <label for="excelFile">ヤンキース ★原本.xlsx</label>
         <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
       </div>
@@ -383,12 +383,6 @@
     return x[value] || "";
   }
 
-  function setExcelShiftTime(ws,row,col,text) {
-    // 元のExcel書式は触らず、値だけを2段表示で入れる。
-    // 書式を再設定すると原本によってExcelJSの書き出し時に
-    // エラーになることがあるため、既存書式をそのまま使う。
-    ws.getCell(row,col).value=text;
-  }
   function defaultPatternForName(name) {
     const r=getRuleByName(name);
     return r && r.options.length ? r.options[0].value : null;
@@ -816,84 +810,289 @@
     currentDate.setMonth(currentDate.getMonth()+1); selectedDates.clear(); closeEdit(); await loadSchedule();
   });
 
-  function cellText(cell) {
-    const v=cell.value;
-    if (v===null || v===undefined) return "";
-    if (typeof v==="object") {
-      if (Array.isArray(v.richText)) return v.richText.map(x=>x.text || "").join("");
-      if (v.text!==undefined) return String(v.text);
-      if (v.result!==undefined && v.result!==null) return String(v.result);
-    }
-    return String(v);
-  }
-  function findRow(ws,target,start,end) {
-    const norm=normalizeStaffName(target);
-    for (let r=start;r<=Math.min(end,ws.rowCount);r++) {
-      if (normalizeStaffName(cellText(ws.getCell(r,1)))===norm) return r;
-    }
-    return null;
-  }
   function findRegistrationByNameDate(name,key) {
     const norm=canonicalStaffName(name);
     return (schedule[key] || []).find(p=>canonicalStaffName(p.staffName)===norm) || null;
   }
 
+  function parseXml(text,label) {
+    const doc=new DOMParser().parseFromString(text,"application/xml");
+    if (doc.getElementsByTagName("parsererror").length) {
+      throw new Error(label+"の解析に失敗しました。");
+    }
+    return doc;
+  }
+
+  function serializeXml(doc) {
+    return new XMLSerializer().serializeToString(doc);
+  }
+
+  function normalizeWorkbookTarget(target) {
+    let p=String(target || "").replace(/\\/g,"/");
+    if (p.startsWith("/")) p=p.slice(1);
+    if (p.startsWith("xl/")) return p;
+    while (p.startsWith("../")) p=p.slice(3);
+    if (p.startsWith("./")) p=p.slice(2);
+    return "xl/"+p;
+  }
+
+  async function getOfficialShiftSheet(zip) {
+    const workbookFile=zip.file("xl/workbook.xml");
+    const relsFile=zip.file("xl/_rels/workbook.xml.rels");
+    if (!workbookFile || !relsFile) {
+      throw new Error("Excelの構成を確認できません。");
+    }
+
+    const workbookDoc=parseXml(await workbookFile.async("string"),"workbook.xml");
+    const relsDoc=parseXml(await relsFile.async("string"),"workbook.xml.rels");
+    const sheets=Array.from(workbookDoc.getElementsByTagName("sheet"));
+
+    if (!sheets.some(s=>s.getAttribute("name")==="祝日")) {
+      throw new Error("「祝日」シートがありません。★原本.xlsxを選択してください。");
+    }
+
+    const main=sheets.find(s=>s.getAttribute("name")!=="祝日");
+    if (!main) throw new Error("シフトシートが見つかりません。");
+
+    const rid=
+      main.getAttribute("r:id") ||
+      main.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id");
+
+    const rel=Array.from(relsDoc.getElementsByTagName("Relationship"))
+      .find(r=>r.getAttribute("Id")===rid);
+
+    if (!rel) throw new Error("シフトシートの参照先が見つかりません。");
+
+    const path=normalizeWorkbookTarget(rel.getAttribute("Target"));
+    const sheetFile=zip.file(path);
+    if (!sheetFile) throw new Error("シフトシート本体が見つかりません。");
+
+    return {
+      workbookDoc,
+      workbookPath:"xl/workbook.xml",
+      sheetName:main.getAttribute("name"),
+      sheetPath:path,
+      sheetDoc:parseXml(await sheetFile.async("string"),"シフトシート")
+    };
+  }
+
+  async function loadSharedStrings(zip) {
+    const file=zip.file("xl/sharedStrings.xml");
+    if (!file) return [];
+    const doc=parseXml(await file.async("string"),"sharedStrings.xml");
+    return Array.from(doc.getElementsByTagName("si")).map(si=>
+      Array.from(si.getElementsByTagName("t"))
+        .map(t=>t.textContent || "")
+        .join("")
+    );
+  }
+
+  function xmlCellText(cell,sharedStrings) {
+    if (!cell) return "";
+    const type=cell.getAttribute("t") || "";
+
+    if (type==="inlineStr") {
+      return Array.from(cell.getElementsByTagName("t"))
+        .map(t=>t.textContent || "")
+        .join("");
+    }
+
+    const v=cell.getElementsByTagName("v")[0];
+    if (!v) return "";
+
+    if (type==="s") {
+      const index=Number(v.textContent);
+      return Number.isInteger(index) && sharedStrings[index]!==undefined
+        ? sharedStrings[index]
+        : "";
+    }
+
+    return v.textContent || "";
+  }
+
+  function findXmlCell(sheetDoc,address) {
+    return Array.from(sheetDoc.getElementsByTagName("c"))
+      .find(c=>c.getAttribute("r")===address) || null;
+  }
+
+  function getOfficialCell(sheetDoc,address) {
+    const cell=findXmlCell(sheetDoc,address);
+    if (!cell) {
+      throw new Error("原本のセル "+address+" が見つかりません。");
+    }
+    return cell;
+  }
+
+  function assertWritableShiftCell(sheetDoc,address) {
+    const cell=getOfficialCell(sheetDoc,address);
+    if (cell.getElementsByTagName("f").length) {
+      throw new Error("原本の勤務欄 "+address+" に数式があるため、書き換えを中止しました。");
+    }
+    return cell;
+  }
+
+  function clearXmlCellValue(cell) {
+    while (cell.firstChild) cell.removeChild(cell.firstChild);
+    cell.removeAttribute("t");
+  }
+
+  function setXmlNumber(sheetDoc,address,value) {
+    const cell=getOfficialCell(sheetDoc,address);
+    if (cell.getElementsByTagName("f").length) {
+      throw new Error(address+" は数式セルのため年月を設定できません。");
+    }
+    clearXmlCellValue(cell);
+    const ns=sheetDoc.documentElement.namespaceURI;
+    const v=sheetDoc.createElementNS(ns,"v");
+    v.textContent=String(value);
+    cell.appendChild(v);
+  }
+
+  function setXmlText(sheetDoc,address,text) {
+    const cell=assertWritableShiftCell(sheetDoc,address);
+    clearXmlCellValue(cell);
+    cell.setAttribute("t","inlineStr");
+
+    const ns=sheetDoc.documentElement.namespaceURI;
+    const is=sheetDoc.createElementNS(ns,"is");
+    const t=sheetDoc.createElementNS(ns,"t");
+    t.setAttributeNS("http://www.w3.org/XML/1998/namespace","xml:space","preserve");
+    t.textContent=String(text);
+    is.appendChild(t);
+    cell.appendChild(is);
+  }
+
+  function findRowInOfficialSheet(sheetDoc,sharedStrings,target,start,end) {
+    const norm=normalizeStaffName(target);
+
+    for (let row=start;row<=end;row++) {
+      const cell=findXmlCell(sheetDoc,"A"+row);
+      if (normalizeStaffName(xmlCellText(cell,sharedStrings))===norm) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  function columnForDay(day) {
+    let n=day+1; // A列が名前、1日はB列
+    let result="";
+    while (n>0) {
+      const rem=(n-1)%26;
+      result=String.fromCharCode(65+rem)+result;
+      n=Math.floor((n-1)/26);
+    }
+    return result;
+  }
+
+  function markWorkbookForRecalculation(workbookDoc) {
+    const root=workbookDoc.documentElement;
+    const ns=root.namespaceURI;
+    let calcPr=workbookDoc.getElementsByTagName("calcPr")[0];
+    if (!calcPr) {
+      calcPr=workbookDoc.createElementNS(ns,"calcPr");
+      root.appendChild(calcPr);
+    }
+    calcPr.setAttribute("calcMode","auto");
+    calcPr.setAttribute("fullCalcOnLoad","1");
+    calcPr.setAttribute("forceFullCalc","1");
+  }
+
+  function verifyOfficialTemplate(sheetDoc) {
+    const requiredFormulaCells=["A1","A2","B4","B12"];
+    const missing=requiredFormulaCells.filter(address=>{
+      const cell=findXmlCell(sheetDoc,address);
+      return !cell || cell.getElementsByTagName("f").length===0;
+    });
+    if (missing.length) {
+      throw new Error("★原本.xlsxの数式構成と一致しません。原本を選び直してください。");
+    }
+  }
+
   excelExportBtn.addEventListener("click",async()=>{
     const file=excelFile.files && excelFile.files[0];
-    if (!file) { showMessage("先にヤンキースのシフトExcelを選択してください。","error"); return; }
-    if (typeof ExcelJS==="undefined") { showMessage("Excel処理ライブラリを読み込めませんでした。","error"); return; }
+    if (!file) {
+      showMessage("先に「★原本.xlsx」を選択してください。","error");
+      return;
+    }
+    if (typeof JSZip==="undefined") {
+      showMessage("Excel処理ライブラリを読み込めませんでした。","error");
+      return;
+    }
 
-    excelExportBtn.disabled=true; excelExportBtn.textContent="Excel作成中...";
-
+    excelExportBtn.disabled=true;
+    excelExportBtn.textContent="Excel作成中...";
     let excelStage="ファイル読込";
+
     try {
       const arrayBuffer=await file.arrayBuffer();
-      const workbook=new ExcelJS.Workbook();
-      excelStage="Excel解析";
-      await workbook.xlsx.load(arrayBuffer);
-      const ws=workbook.worksheets[0];
-      if (!ws) throw new Error("シートが見つかりません。");
+      const zip=await JSZip.loadAsync(arrayBuffer);
 
-      const y=currentDate.getFullYear(), m=currentDate.getMonth(), month=m+1;
-      const title=cellText(ws.getCell(1,1));
-      if (title && !title.includes(month+"月")) {
-        const go=confirm("選択したExcelの月と、画面で表示中の "+month+"月 が違う可能性があります。\nそのまま反映しますか？");
-        if (!go) { excelExportBtn.disabled=false; excelExportBtn.textContent="この月の希望を反映してExcel出力"; return; }
-      }
+      excelStage="原本確認";
+      const official=await getOfficialShiftSheet(zip);
+      const sheetDoc=official.sheetDoc;
+      const sharedStrings=await loadSharedStrings(zip);
+      verifyOfficialTemplate(sheetDoc);
+
+      const y=currentDate.getFullYear();
+      const m=currentDate.getMonth();
+      const month=m+1;
+      const lastDay=new Date(y,m+1,0).getDate();
+
+      // ★原本の年月セルだけ更新。タイトル・日付・曜日・集計は
+      // 原本の数式に任せる。
+      setXmlNumber(sheetDoc,"A3",y);
+      setXmlNumber(sheetDoc,"B3",month);
 
       const dayRows={
-        "藤井亮輔":findRow(ws,"藤井亮輔",1,13),
-        "桑原莉子":findRow(ws,"桑原莉子",1,13),
-        "古垣竜也":findRow(ws,"古垣竜也",1,13)
+        "藤井亮輔":findRowInOfficialSheet(sheetDoc,sharedStrings,"藤井亮輔",1,13),
+        "桑原莉子":findRowInOfficialSheet(sheetDoc,sharedStrings,"桑原莉子",1,13),
+        "古垣竜也":findRowInOfficialSheet(sheetDoc,sharedStrings,"古垣竜也",1,13)
       };
-      const kamadaDayRow=findRow(ws,"鎌田フサ子",1,13);
+
+      const kamadaDayRow=
+        findRowInOfficialSheet(sheetDoc,sharedStrings,"鎌田フサ子",1,13);
+
       const nightRows={
-        "内藤昌子":findRow(ws,"内藤昌子",13,22),
-        "前川良司":findRow(ws,"前川良司",13,22),
-        "鹿島佑斗":findRow(ws,"鹿島佑斗",13,22),
-        "鎌田フサ子":findRow(ws,"鎌田フサ子",13,22)
+        "内藤昌子":findRowInOfficialSheet(sheetDoc,sharedStrings,"内藤昌子",13,22),
+        "前川良司":findRowInOfficialSheet(sheetDoc,sharedStrings,"前川良司",13,22),
+        "鹿島佑斗":findRowInOfficialSheet(sheetDoc,sharedStrings,"鹿島佑斗",13,22),
+        "鎌田フサ子":findRowInOfficialSheet(sheetDoc,sharedStrings,"鎌田フサ子",13,22)
       };
 
       const missing=[];
-      Object.entries(dayRows).forEach(([n,r])=>{if(!r)missing.push(n);});
-      Object.entries(nightRows).forEach(([n,r])=>{if(!r)missing.push(n);});
-      if (!kamadaDayRow) missing.push("鎌田フサ子(夜勤兼務)");
-      if (missing.length) throw new Error("シフト表で職員行を確認できません："+missing.join("、"));
+      Object.entries(dayRows).forEach(([name,row])=>{ if(!row) missing.push(name); });
+      Object.entries(nightRows).forEach(([name,row])=>{ if(!row) missing.push(name); });
+      if (!kamadaDayRow) missing.push("鎌田フサ子（夜勤兼務）");
 
-      const lastDay=new Date(y,m+1,0).getDate();
+      if (missing.length) {
+        throw new Error("★原本.xlsxで職員行を確認できません："+missing.join("、"));
+      }
 
+      excelStage="希望反映";
+
+      // 日勤3名：休み希望がある日だけ「公休」。
+      // 希望がない日は原本のセルを触らない。
       for (const [name,row] of Object.entries(dayRows)) {
         for (let day=1;day<=lastDay;day++) {
           const key=dateKey(y,m,day);
           const reg=findRegistrationByNameDate(name,key);
-          if (reg && reg.shiftPattern==="OFF") ws.getCell(row,day+1).value="公休";
+          if (reg && reg.shiftPattern==="OFF") {
+            setXmlText(sheetDoc,columnForDay(day)+row,"公休");
+          }
         }
       }
 
+      // 夜勤4名：働ける日以外は「公休」。
+      // 鎌田さんの7:00-10:00は上段（夜勤兼務の行）へ入れる。
       for (const row of Object.values(nightRows)) {
-        for (let day=1;day<=lastDay;day++) ws.getCell(row,day+1).value="公休";
+        for (let day=1;day<=lastDay;day++) {
+          setXmlText(sheetDoc,columnForDay(day)+row,"公休");
+        }
       }
-      for (let day=1;day<=lastDay;day++) ws.getCell(kamadaDayRow,day+1).value="公休";
+      for (let day=1;day<=lastDay;day++) {
+        setXmlText(sheetDoc,columnForDay(day)+kamadaDayRow,"公休");
+      }
 
       for (const [name,row] of Object.entries(nightRows)) {
         for (let day=1;day<=lastDay;day++) {
@@ -902,28 +1101,70 @@
           if (!reg) continue;
 
           if (name==="鎌田フサ子" && reg.shiftPattern==="07:00-10:00") {
-            setExcelShiftTime(ws,kamadaDayRow,day+1,excelPattern(reg.shiftPattern));
-            ws.getCell(row,day+1).value="公休";
+            setXmlText(
+              sheetDoc,
+              columnForDay(day)+kamadaDayRow,
+              excelPattern(reg.shiftPattern)
+            );
+            setXmlText(sheetDoc,columnForDay(day)+row,"公休");
           } else {
             const label=excelPattern(reg.shiftPattern || defaultPatternForName(name));
-            if (label) setExcelShiftTime(ws,row,day+1,label);
+            if (label) {
+              setXmlText(sheetDoc,columnForDay(day)+row,label);
+            }
           }
         }
       }
 
+      // 31日がない月に、原本へ以前の値が残っていた場合だけ
+      // 対象職員の余分な日を空にする。数式セルには触らない。
+      for (let day=lastDay+1;day<=31;day++) {
+        const col=columnForDay(day);
+        for (const row of [
+          ...Object.values(dayRows),
+          kamadaDayRow,
+          ...Object.values(nightRows)
+        ]) {
+          const cell=assertWritableShiftCell(sheetDoc,col+row);
+          clearXmlCellValue(cell);
+        }
+      }
+
+      markWorkbookForRecalculation(official.workbookDoc);
+
+      // 変更するのは workbook.xml とシフトシートXMLだけ。
+      // 祝日・数式・書式・コメント・印刷設定など、その他のファイルは
+      // JSZip内でそのまま保持する。
+      zip.file(official.workbookPath,serializeXml(official.workbookDoc));
+      zip.file(official.sheetPath,serializeXml(sheetDoc));
+
       excelStage="Excel保存";
-      const out=await workbook.xlsx.writeBuffer();
-      const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const out=await zip.generateAsync({
+        type:"arraybuffer",
+        compression:"DEFLATE",
+        compressionOptions:{level:6}
+      });
+
+      const blob=new Blob(
+        [out],
+        {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+      );
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");
       a.href=url;
       a.download="ヤンキースシフト_"+y+"年"+month+"月_希望反映.xlsx";
-      document.body.appendChild(a); a.click(); a.remove();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
-      showMessage("Excelへ希望を反映しました。");
+
+      showMessage("★原本の数式・書式を残したまま、希望を反映しました。");
     } catch(error) {
       console.error("Excel export failed at",excelStage,error);
-      showMessage("Excelへ反映できませんでした（"+excelStage+"）："+(error.message || error),"error");
+      showMessage(
+        "Excelへ反映できませんでした（"+excelStage+"）："+(error.message || error),
+        "error"
+      );
     } finally {
       excelExportBtn.disabled=false;
       excelExportBtn.textContent="この月の希望を反映してExcel出力";
