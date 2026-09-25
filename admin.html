@@ -217,7 +217,7 @@
         表示中の年月も原本へ自動で合わせます。
       </div>
       <div class="excel-box">
-        <label for="excelFile">ヤンキース ★原本.xlsx</label>
+        <label for="excelFile">ヤンキース ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（黒塗り修正版）</span></label>
         <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
       </div>
@@ -1068,11 +1068,14 @@
     }
 
     const base=Number(countMatch[1]);
+    // ★原本に元から入っている条件付き書式と同じ
+    // 「fgColor indexed=64 + bgColor RGB」の形式で追加する。
+    // 逆にするとExcelで黒塗りになることがある。
     const newDxfs=[
-      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFFFC000"/><bgColor indexed="64"/></patternFill></fill></dxf>',
-      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFD9E1F2"/><bgColor indexed="64"/></patternFill></fill></dxf>',
-      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFD9B3FF"/><bgColor indexed="64"/></patternFill></fill></dxf>',
-      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFFF99CC"/><bgColor indexed="64"/></patternFill></fill></dxf>',
+      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor indexed="64"/><bgColor rgb="FFFFC000"/></patternFill></fill></dxf>',
+      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor indexed="64"/><bgColor rgb="FFD9E1F2"/></patternFill></fill></dxf>',
+      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor indexed="64"/><bgColor rgb="FFD9B3FF"/></patternFill></fill></dxf>',
+      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor indexed="64"/><bgColor rgb="FFFF99CC"/></patternFill></fill></dxf>',
       '<dxf><font><color rgb="FF000000"/></font></dxf>'
     ];
 
