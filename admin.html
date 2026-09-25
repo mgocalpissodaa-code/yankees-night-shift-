@@ -212,12 +212,12 @@
     <div class="card">
       <h2>Excelへ反映</h2>
       <div class="sub">
-        今後は「★原本.xlsx」を使います。原本の数式・祝日シート・書式はそのまま残し、
+        「ヤンキース_★原本_修正版.xlsx」を使います。
+        Web側はExcelの書式には触らず、希望内容と年月の値だけを反映します。
         日勤3名は休み希望だけ、夜勤4名は希望入力済みの職員だけ勤務可能日を反映します。
-        表示中の年月も原本へ自動で合わせます。
       </div>
       <div class="excel-box">
-        <label for="excelFile">ヤンキース ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（原本ルール保持版・エラー修正）</span></label>
+        <label for="excelFile">ヤンキース_★原本_修正版.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（値だけ反映版）</span></label>
         <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
       </div>
@@ -1326,14 +1326,8 @@
         }
       }
 
-      const prepared=prepareOfficialTemplateForExport(stylesXml,sheetXml);
-      stylesXml=prepared.stylesXml;
-      sheetXml=prepared.sheetXml;
-
-      workbookXml=markWorkbookForRecalculationRaw(workbookXml);
-
-      zip.file(official.workbookPath,workbookXml);
-      zip.file(official.stylesPath,stylesXml);
+      // 修正版原本に入っている書式・条件付き書式・数式は一切変更しない。
+      // Webアプリはシフトシートのセル値だけを書き換える。
       zip.file(official.sheetPath,sheetXml);
 
       excelStage="Excel保存";
@@ -1356,7 +1350,7 @@
       a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
 
-      showMessage("★原本の書式を壊さず、希望と自動色を反映しました。");
+      showMessage("修正版原本に希望内容だけを反映してExcelを作成しました。");
     } catch(error) {
       console.error("Excel export failed at",excelStage,error);
       showMessage(
