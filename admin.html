@@ -3,223 +3,129 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>ヤンキース 夜勤希望 管理者</title>
+  <title>ヤンキース 希望入力 管理者</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <style>
-    * { box-sizing: border-box; }
+    * { box-sizing:border-box; }
     body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
-      background: #f5f7fb;
-      color: #1f2937;
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
+      background:#f5f7fb;
+      color:#1f2937;
     }
-    .app { max-width: 900px; margin: 0 auto; padding: 18px 12px 40px; }
+    .app { max-width:920px; margin:0 auto; padding:18px 12px 40px; }
     .card {
-      background: #fff;
-      border-radius: 18px;
-      padding: 16px;
-      box-shadow: 0 3px 16px rgba(0,0,0,.06);
-      margin-bottom: 14px;
+      background:#fff; border-radius:18px; padding:16px;
+      box-shadow:0 3px 16px rgba(0,0,0,.06); margin-bottom:14px;
     }
-    h1 { margin: 0 0 6px; font-size: 24px; }
-    h2 { margin: 0 0 12px; font-size: 19px; }
-    .sub { color: #64748b; font-size: 14px; line-height: 1.5; }
-    .hidden { display: none !important; }
-    label { display: block; font-weight: 800; margin-bottom: 7px; }
-    select, input {
-      width: 100%;
-      padding: 13px;
-      border: 1px solid #cbd5e1;
-      border-radius: 12px;
-      background: #fff;
-      font-size: 16px;
+    h1 { margin:0 0 6px; font-size:24px; }
+    h2 { margin:0 0 12px; font-size:19px; }
+    .sub { color:#64748b; font-size:14px; line-height:1.55; }
+    .hidden { display:none !important; }
+    label { display:block; font-weight:800; margin-bottom:7px; }
+    select,input {
+      width:100%; padding:13px; border:1px solid #cbd5e1;
+      border-radius:12px; background:#fff; font-size:16px;
     }
     button {
-      border: 0;
-      border-radius: 12px;
-      padding: 13px 15px;
-      font-size: 16px;
-      font-weight: 800;
-      cursor: pointer;
+      border:0; border-radius:12px; padding:13px 15px;
+      font-size:16px; font-weight:800; cursor:pointer;
     }
-    button:disabled { opacity: .45; cursor: default; }
-    .primary { background: #2563eb; color: #fff; }
-    .danger { background: #fee2e2; color: #b91c1c; }
-    .secondary { background: #eef2ff; color: #334155; }
-    .success { background: #dcfce7; color: #166534; }
-    .full { width: 100%; }
-    .top-row, .form-grid, .edit-grid {
-      display: grid;
-      gap: 10px;
-    }
-    .top-row { grid-template-columns: 1fr auto; align-items: center; }
-    .form-grid { grid-template-columns: 1fr auto; align-items: end; }
-    .edit-grid { grid-template-columns: 1fr 1fr; }
-    .month-nav {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-    .month-title { font-size: 24px; font-weight: 900; text-align: center; flex: 1; }
-    .nav-btn {
-      width: 48px;
-      height: 48px;
-      padding: 0;
-      font-size: 25px;
-      background: #eef2ff;
-      color: #2563eb;
-    }
-    .weekdays, .calendar {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 5px;
-    }
-    .weekday {
-      text-align: center;
-      font-size: 13px;
-      font-weight: 800;
-      color: #64748b;
-      padding-bottom: 5px;
-    }
-    .weekday.sun { color: #ef4444; }
-    .weekday.sat { color: #3b82f6; }
+    button:disabled { opacity:.45; cursor:default; }
+    .primary { background:#2563eb; color:#fff; }
+    .danger { background:#fee2e2; color:#b91c1c; }
+    .secondary { background:#eef2ff; color:#334155; }
+    .success { background:#dcfce7; color:#166534; }
+    .full { width:100%; }
+    .top-row,.form-grid,.edit-grid { display:grid; gap:10px; }
+    .top-row { grid-template-columns:1fr auto; align-items:center; }
+    .form-grid { grid-template-columns:1fr auto; align-items:end; }
+    .edit-grid { grid-template-columns:1fr 1fr 1fr; }
+    .month-nav { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:14px; }
+    .month-title { font-size:24px; font-weight:900; text-align:center; flex:1; }
+    .nav-btn { width:48px; height:48px; padding:0; font-size:25px; background:#eef2ff; color:#2563eb; }
+    .weekdays,.calendar { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+    .weekday { text-align:center; font-size:13px; font-weight:800; color:#64748b; padding-bottom:5px; }
+    .weekday.sun { color:#ef4444; }
+    .weekday.sat { color:#3b82f6; }
     .day {
-      min-height: 112px;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      background: #fff;
-      padding: 7px 5px;
-      cursor: pointer;
-      overflow: hidden;
+      min-height:116px; border:1px solid #e2e8f0; border-radius:12px;
+      background:#fff; padding:7px 5px; cursor:pointer; overflow:hidden;
     }
-    .day.empty { visibility: hidden; }
-    .day.past { opacity: .5; }
-    .day.selected { border: 2px solid #2563eb; background: #eff6ff; }
-    .day.has-registrations { background: #fff7ed; }
-    .date-num { font-size: 18px; font-weight: 900; margin-bottom: 4px; }
-    .sun-date, .holiday-date { color: #ef4444; }
-    .sat-date { color: #3b82f6; }
+    .day.empty { visibility:hidden; }
+    .day.past { opacity:.5; }
+    .day.selected { border:2px solid #2563eb; background:#eff6ff; }
+    .day.has-registrations { background:#fff7ed; }
+    .date-num { font-size:18px; font-weight:900; margin-bottom:4px; }
+    .sun-date,.holiday-date { color:#ef4444; }
+    .sat-date { color:#3b82f6; }
     .count {
-      text-align: center;
-      font-size: 11px;
-      font-weight: 800;
-      padding: 3px;
-      border-radius: 7px;
-      margin-bottom: 5px;
-      background: #ecfdf5;
-      color: #15803d;
+      text-align:center; font-size:11px; font-weight:800; padding:3px;
+      border-radius:7px; margin-bottom:5px; background:#ecfdf5; color:#15803d;
     }
-    .has-registrations .count { background: #ffedd5; color: #c2410c; }
+    .has-registrations .count { background:#ffedd5; color:#c2410c; }
     .staff-tag {
-      display: block;
-      width: 100%;
-      margin-top: 4px;
-      padding: 5px 3px;
-      border-radius: 7px;
-      background: #e0f2fe;
-      color: #0c4a6e;
-      font-size: 11px;
-      font-weight: 800;
-      text-align: center;
-      cursor: pointer;
+      display:block; width:100%; margin-top:4px; padding:5px 3px; border-radius:7px;
+      background:#e0f2fe; color:#0c4a6e; font-size:10px; font-weight:800;
+      text-align:center; cursor:pointer;
     }
-    .staff-tag:hover { outline: 2px solid #38bdf8; }
-    .selected-mark {
-      margin-top: 5px;
-      color: #2563eb;
-      font-size: 11px;
-      font-weight: 800;
-      text-align: center;
-    }
-    .actions { margin-top: 12px; }
-    .selected-info { margin-bottom: 8px; text-align: center; font-weight: 800; color: #475569; }
+    .selected-mark { margin-top:5px; color:#2563eb; font-size:11px; font-weight:800; text-align:center; }
+    .selected-info { margin-top:10px; text-align:center; font-weight:800; color:#475569; }
     .message {
-      display: none;
-      padding: 12px;
-      margin-bottom: 12px;
-      border-radius: 12px;
-      font-size: 14px;
-      font-weight: 800;
+      display:none; padding:12px; margin-bottom:12px; border-radius:12px;
+      font-size:14px; font-weight:800;
     }
-    .message.ok { display: block; background: #dcfce7; color: #166534; }
-    .message.error { display: block; background: #fee2e2; color: #991b1b; }
-    .login-wrap { max-width: 480px; margin: 70px auto 0; }
-    .login-note { font-size: 12px; color: #64748b; margin-top: 8px; }
-    .edit-original {
-      padding: 10px;
-      margin-bottom: 10px;
-      border-radius: 10px;
-      background: #f8fafc;
-      font-weight: 800;
-    }
-    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-    .small-link { color: #2563eb; text-decoration: none; font-weight: 700; font-size: 14px; }
-    .staff-manage-list { display: grid; gap: 8px; margin-top: 12px; }
+    .message.ok { display:block; background:#dcfce7; color:#166534; }
+    .message.error { display:block; background:#fee2e2; color:#991b1b; }
+    .login-wrap { max-width:480px; margin:70px auto 0; }
+    .login-note { font-size:12px; color:#64748b; margin-top:8px; }
+    .edit-original { padding:10px; margin-bottom:10px; border-radius:10px; background:#f8fafc; font-weight:800; }
+    .button-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+    .small-link { color:#2563eb; text-decoration:none; font-weight:700; font-size:14px; }
+    .staff-manage-list { display:grid; gap:8px; margin-top:12px; }
     .staff-manage-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      background: #f8fafc;
+      display:flex; align-items:center; gap:10px; padding:10px;
+      border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc;
     }
-    .staff-manage-row.inactive { opacity: .62; }
-    .staff-manage-info { flex: 1; min-width: 0; }
-    .staff-manage-name { font-weight: 900; word-break: break-all; }
-    .staff-manage-status { margin-top: 3px; font-size: 12px; color: #64748b; font-weight: 700; }
-    .staff-manage-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-    .small-btn { padding: 9px 11px; font-size: 13px; }
+    .staff-manage-info { flex:1; min-width:0; }
+    .staff-manage-name { font-weight:900; word-break:break-all; }
+    .staff-manage-status { margin-top:3px; font-size:12px; color:#64748b; font-weight:700; }
+    .staff-manage-actions { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .small-btn { padding:9px 11px; font-size:13px; }
     .count-summary {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 8px;
-      margin-top: 10px;
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+      gap:8px; margin-top:10px;
     }
     .count-summary-item {
-      padding: 10px;
-      border-radius: 12px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      text-align: center;
+      padding:10px; border-radius:12px; background:#f8fafc;
+      border:1px solid #e2e8f0; text-align:center;
     }
-    .count-summary-name {
-      font-size: 14px;
-      font-weight: 800;
-      margin-bottom: 4px;
-      word-break: break-all;
-    }
-    .count-summary-days {
-      font-size: 20px;
-      font-weight: 900;
-      color: #2563eb;
-    }
-    @media (max-width: 600px) {
-      .app { padding-left: 6px; padding-right: 6px; }
-      .card { padding: 11px 7px; }
-      .calendar, .weekdays { gap: 3px; }
-      .day { min-height: 100px; padding: 5px 3px; }
-      .date-num { font-size: 16px; }
-      .form-grid, .edit-grid { grid-template-columns: 1fr; }
-      .top-row { grid-template-columns: 1fr; }
-      .top-row button { width: 100%; }
-      .staff-manage-row { align-items: flex-start; flex-direction: column; }
-      .staff-manage-actions { width: 100%; }
-      .staff-manage-actions button { flex: 1; }
+    .count-summary-name { font-size:14px; font-weight:800; margin-bottom:4px; word-break:break-all; }
+    .count-summary-days { font-size:20px; font-weight:900; color:#2563eb; }
+    .excel-box { padding:12px; border-radius:12px; background:#f8fafc; margin-top:10px; }
+    @media (max-width:600px) {
+      .app { padding-left:6px; padding-right:6px; }
+      .card { padding:11px 7px; }
+      .calendar,.weekdays { gap:3px; }
+      .day { min-height:103px; padding:5px 3px; }
+      .date-num { font-size:16px; }
+      .form-grid,.edit-grid,.top-row { grid-template-columns:1fr; }
+      .top-row button { width:100%; }
+      .staff-manage-row { align-items:flex-start; flex-direction:column; }
+      .staff-manage-actions { width:100%; }
+      .staff-manage-actions button { flex:1; }
     }
   </style>
 </head>
 <body>
 <div class="app">
-
   <div id="message" class="message"></div>
 
   <div id="loginView" class="login-wrap">
     <div class="card">
       <h1>🔐 管理者ログイン</h1>
-      <div class="sub">ヤンキース 夜勤希望の管理者画面です。</div>
+      <div class="sub">ヤンキース 希望入力の管理者画面です。</div>
       <div style="margin-top:16px;">
         <label for="adminPassword">管理者パスワード</label>
         <input id="adminPassword" type="password" autocomplete="current-password" placeholder="パスワードを入力">
@@ -233,19 +139,19 @@
     <div class="card">
       <div class="top-row">
         <div>
-          <h1>🌙 ヤンキース 夜勤希望 管理者</h1>
-          <div class="sub">全員の登録確認・追加・変更・取消ができます。同じ日に何人でも登録できます。</div>
+          <h1>🌙 ヤンキース 希望入力 管理者</h1>
+          <div class="sub">日勤者の休み希望と、夜勤者の働ける日・勤務時間をまとめて管理できます。</div>
         </div>
         <button id="logoutBtn" class="secondary">ログアウト</button>
       </div>
-      <div style="margin-top:10px;">
-        <a class="small-link" href="./index.html">← 職員用画面へ</a>
-      </div>
+      <div style="margin-top:10px;"><a class="small-link" href="./index.html">← 職員用画面へ</a></div>
     </div>
 
     <div class="card">
       <h2>職員管理</h2>
-      <div class="sub">新しい職員の追加、名前変更、削除ができます。職員を削除すると、その職員の夜勤希望登録もすべて削除されます。</div>
+      <div class="sub">
+        ヤンキースの入力対象は、日勤：藤井・桑原・古垣、夜勤：内藤・前川・鹿島・鎌田です。安庭・宮路は入力対象外です。
+      </div>
       <div class="form-grid" style="margin-top:12px;">
         <div>
           <label for="newStaffName">新しい職員名</label>
@@ -253,29 +159,28 @@
         </div>
         <button id="addStaffBtn" class="success">職員を追加</button>
       </div>
-      <div style="margin-top:10px;">
-        <button id="syncYankeesStaffBtn" class="secondary full" type="button">
-          シフト表の夜勤職員4名を反映
-        </button>
-        <div class="sub" style="margin-top:6px;">
-          内藤 昌子・前川 良司・鹿島 佑斗・鎌田 フサ子に揃えます。
-        </div>
-      </div>
+      <button id="syncYankeesStaffBtn" class="secondary full" type="button" style="margin-top:10px;">
+        シフト表の入力対象7名を反映
+      </button>
       <div id="staffManageList" class="staff-manage-list"></div>
     </div>
 
     <div class="card">
       <h2>新しく登録する</h2>
-      <div class="form-grid">
+      <div class="edit-grid">
         <div>
           <label for="staffSelect">職員名</label>
-          <select id="staffSelect">
-            <option value="">職員を選択してください</option>
-          </select>
+          <select id="staffSelect"><option value="">職員を選択してください</option></select>
         </div>
-        <button id="registerBtn" class="primary" disabled>選択した日に登録</button>
+        <div id="adminPatternWrap">
+          <label for="adminPatternSelect">希望内容 / 勤務時間</label>
+          <select id="adminPatternSelect"></select>
+        </div>
+        <div style="display:flex;align-items:end;">
+          <button id="registerBtn" class="primary full" disabled>選択した日に登録</button>
+        </div>
       </div>
-      <div id="selectedInfo" class="selected-info" style="margin-top:10px;">日付を選択してください</div>
+      <div id="selectedInfo" class="selected-info">日付を選択してください</div>
     </div>
 
     <div class="card">
@@ -284,19 +189,28 @@
     </div>
 
     <div class="card">
+      <h2>Excelへ反映</h2>
+      <div class="sub">
+        現在表示している月の希望を、ヤンキースのシフト原本へ反映して新しいExcelを作ります。
+        日勤3名は休み希望日に「公休」、夜勤4名は働けない日を「公休」、働ける日は勤務時間で反映します。
+        安庭・宮路の行は変更しません。
+      </div>
+      <div class="excel-box">
+        <label for="excelFile">ヤンキースのシフト原本（.xlsx）</label>
+        <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="month-nav">
         <button id="prevMonth" class="nav-btn">‹</button>
         <div id="monthTitle" class="month-title"></div>
         <button id="nextMonth" class="nav-btn">›</button>
       </div>
-
       <div class="weekdays">
-        <div class="weekday sun">日</div>
-        <div class="weekday">月</div>
-        <div class="weekday">火</div>
-        <div class="weekday">水</div>
-        <div class="weekday">木</div>
-        <div class="weekday">金</div>
+        <div class="weekday sun">日</div><div class="weekday">月</div><div class="weekday">火</div>
+        <div class="weekday">水</div><div class="weekday">木</div><div class="weekday">金</div>
         <div class="weekday sat">土</div>
       </div>
       <div id="calendar" class="calendar"></div>
@@ -314,6 +228,10 @@
           <label for="editDate">変更後の日付</label>
           <input id="editDate" type="date">
         </div>
+        <div>
+          <label for="editPattern">変更後の希望内容 / 勤務時間</label>
+          <select id="editPattern"></select>
+        </div>
       </div>
       <div class="button-row">
         <button id="changeBtn" class="primary">変更する</button>
@@ -321,7 +239,6 @@
       </div>
       <button id="closeEditBtn" class="secondary full" style="margin-top:10px;">閉じる</button>
     </div>
-
   </div>
 </div>
 
@@ -329,17 +246,43 @@
   const SUPABASE_URL = "https://ujdexmngrwqixeirvoil.supabase.co";
   const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqZGV4bW5ncndxaXhlaXJ2b2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5NzAzNzIsImV4cCI6MjEwNTU0NjM3Mn0.aMJo_dwqnVmGL72jUCG0vJ7G4Q72fpJOPRsmhwjeC4M";
   const ADMIN_EMAIL = "admin@example.com";
-
   const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const STAFF_RULES = {
+    "藤井亮輔": { mode:"off", title:"休み希望", options:[{value:"OFF",label:"休み希望"}] },
+    "桑原莉子": { mode:"off", title:"休み希望", options:[{value:"OFF",label:"休み希望"}] },
+    "古垣竜也": { mode:"off", title:"休み希望", options:[{value:"OFF",label:"休み希望"}] },
+    "内藤昌子": { mode:"work", title:"働ける日", options:[{value:"22:00-03:00",label:"22:00〜3:00"}] },
+    "前川良司": { mode:"work", title:"働ける日", options:[{value:"22:00-06:00",label:"22:00〜6:00"}] },
+    "鹿島佑斗": { mode:"work", title:"働ける日", options:[{value:"22:00-06:00",label:"22:00〜6:00"}] },
+    "鎌田フサ子": {
+      mode:"work", title:"働ける日",
+      options:[
+        {value:"22:00-06:00",label:"22:00〜6:00"},
+        {value:"19:00-06:00",label:"19:00〜6:00"},
+        {value:"07:00-10:00",label:"7:00〜10:00"}
+      ]
+    }
+  };
+
+  const SYNC_TARGETS = [
+    {name:"藤井 亮輔",aliases:["藤井","藤井亮輔"]},
+    {name:"桑原 莉子",aliases:["桑原","桑原莉子"]},
+    {name:"古垣 竜也",aliases:["古垣","古垣竜也"]},
+    {name:"内藤 昌子",aliases:["内藤","内藤昌子"]},
+    {name:"前川 良司",aliases:["前川","前川良司"]},
+    {name:"鹿島 佑斗",aliases:["鹿島","鹿島佑斗"]},
+    {name:"鎌田 フサ子",aliases:["鎌田","鎌田フサ子"]}
+  ];
 
   let currentDate = new Date();
   currentDate.setDate(1);
   let staffs = [];
+  let managedStaffs = [];
   let schedule = {};
   let holidays = {};
   let selectedDates = new Set();
   let selectedRegistration = null;
-  let managedStaffs = [];
 
   const loginView = document.getElementById("loginView");
   const adminView = document.getElementById("adminView");
@@ -348,6 +291,7 @@
   const logoutBtn = document.getElementById("logoutBtn");
   const message = document.getElementById("message");
   const staffSelect = document.getElementById("staffSelect");
+  const adminPatternSelect = document.getElementById("adminPatternSelect");
   const registerBtn = document.getElementById("registerBtn");
   const selectedInfo = document.getElementById("selectedInfo");
   const monthTitle = document.getElementById("monthTitle");
@@ -356,218 +300,146 @@
   const editOriginal = document.getElementById("editOriginal");
   const editStaff = document.getElementById("editStaff");
   const editDate = document.getElementById("editDate");
+  const editPattern = document.getElementById("editPattern");
   const changeBtn = document.getElementById("changeBtn");
   const cancelRegistrationBtn = document.getElementById("cancelRegistrationBtn");
   const closeEditBtn = document.getElementById("closeEditBtn");
   const newStaffName = document.getElementById("newStaffName");
   const addStaffBtn = document.getElementById("addStaffBtn");
-  const staffManageList = document.getElementById("staffManageList");
   const syncYankeesStaffBtn = document.getElementById("syncYankeesStaffBtn");
+  const staffManageList = document.getElementById("staffManageList");
   const countSummaryTitle = document.getElementById("countSummaryTitle");
   const countSummary = document.getElementById("countSummary");
+  const excelFile = document.getElementById("excelFile");
+  const excelExportBtn = document.getElementById("excelExportBtn");
 
-  function dateKey(year, month, day) {
-    return year + "-" + String(month + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+  function normalizeStaffName(name) {
+    return String(name || "").replace(/[\s　]+/g,"").replace(/\([^)]*\)/g,"").trim();
   }
-
+  function getRuleByName(name) { return STAFF_RULES[normalizeStaffName(name)] || null; }
+  function dateKey(year,month,day) {
+    return year + "-" + String(month+1).padStart(2,"0") + "-" + String(day).padStart(2,"0");
+  }
   function todayKey() {
     const d = new Date();
-    return dateKey(d.getFullYear(), d.getMonth(), d.getDate());
+    return dateKey(d.getFullYear(),d.getMonth(),d.getDate());
   }
-
-  function showMessage(text, type) {
-    message.className = "message " + (type || "ok");
-    message.textContent = text;
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    setTimeout(function() {
-      message.className = "message";
-    }, 4500);
+  function patternLabel(value) {
+    const x={"OFF":"休","22:00-03:00":"22-3","22:00-06:00":"22-6","19:00-06:00":"19-6","07:00-10:00":"7-10"};
+    return x[value] || "";
+  }
+  function excelPattern(value) {
+    const x={"22:00-03:00":"22:00～3:00","22:00-06:00":"22:00～6:00","19:00-06:00":"19:00～6:00","07:00-10:00":"7:00～10:00"};
+    return x[value] || "";
+  }
+  function defaultPatternForName(name) {
+    const r=getRuleByName(name);
+    return r && r.options.length ? r.options[0].value : null;
+  }
+  function showMessage(text,type) {
+    message.className="message " + (type || "ok");
+    message.textContent=text;
+    window.scrollTo({top:0,behavior:"smooth"});
+    setTimeout(()=>{message.className="message";},4500);
+  }
+  function fillPatternSelect(select,name,currentValue) {
+    const rule=getRuleByName(name);
+    select.innerHTML="";
+    if (!rule) {
+      const o=document.createElement("option");
+      o.value=""; o.textContent="勤務設定なし"; select.appendChild(o);
+      select.disabled=true;
+      return;
+    }
+    select.disabled=false;
+    rule.options.forEach(opt=>{
+      const o=document.createElement("option");
+      o.value=opt.value; o.textContent=opt.label; select.appendChild(o);
+    });
+    if (currentValue && rule.options.some(x=>x.value===currentValue)) select.value=currentValue;
   }
 
   async function loadHolidays() {
     try {
-      const response = await fetch("https://holidays-jp.github.io/api/v1/date.json", { cache: "no-store" });
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      holidays = await response.json();
-    } catch (error) {
-      holidays = {};
-      console.warn("祝日データを取得できませんでした。", error);
-    }
+      const response=await fetch("https://holidays-jp.github.io/api/v1/date.json",{cache:"no-store"});
+      if (!response.ok) throw new Error("HTTP "+response.status);
+      holidays=await response.json();
+    } catch(e) { holidays={}; }
   }
 
   async function loadStaffs() {
-    const result = await client.rpc("get_active_staffs");
-    if (result.error) {
-      showMessage("職員一覧を取得できませんでした：" + result.error.message, "error");
-      return;
-    }
-
-    staffs = result.data || [];
-    staffSelect.innerHTML = '<option value="">職員を選択してください</option>';
-    editStaff.innerHTML = "";
-
-    staffs.forEach(function(staff) {
-      const a = document.createElement("option");
-      a.value = staff.id;
-      a.textContent = staff.name;
-      staffSelect.appendChild(a);
-
-      const b = document.createElement("option");
-      b.value = staff.id;
-      b.textContent = staff.name;
-      editStaff.appendChild(b);
+    const result=await client.rpc("get_active_staffs");
+    if (result.error) { showMessage("職員一覧を取得できませんでした："+result.error.message,"error"); return; }
+    staffs=(result.data || []).filter(s=>!!getRuleByName(s.name));
+    staffSelect.innerHTML='<option value="">職員を選択してください</option>';
+    editStaff.innerHTML="";
+    staffs.forEach(staff=>{
+      const a=document.createElement("option"); a.value=staff.id; a.textContent=staff.name; staffSelect.appendChild(a);
+      const b=document.createElement("option"); b.value=staff.id; b.textContent=staff.name; editStaff.appendChild(b);
     });
+    updateAdminPattern();
   }
 
   async function loadManagedStaffs() {
-    const result = await client.rpc("admin_list_staffs");
-
-    if (result.error) {
-      staffManageList.innerHTML = "";
-      showMessage(
-        "職員管理の準備がまだ完了していません：" + result.error.message,
-        "error"
-      );
-      return;
-    }
-
-    managedStaffs = result.data || [];
+    const result=await client.rpc("admin_list_staffs");
+    if (result.error) { showMessage("職員管理を取得できませんでした："+result.error.message,"error"); return; }
+    managedStaffs=result.data || [];
     renderManagedStaffs();
   }
 
   function renderManagedStaffs() {
-    staffManageList.innerHTML = "";
+    staffManageList.innerHTML="";
+    managedStaffs.forEach(staff=>{
+      const row=document.createElement("div"); row.className="staff-manage-row";
+      const info=document.createElement("div"); info.className="staff-manage-info";
+      const name=document.createElement("div"); name.className="staff-manage-name"; name.textContent=staff.name;
+      const status=document.createElement("div"); status.className="staff-manage-status";
+      const rule=getRuleByName(staff.name);
+      status.textContent=rule ? (rule.mode==="off" ? "日勤・休み希望" : "勤務可能日") : "入力対象外";
+      info.appendChild(name); info.appendChild(status);
 
-    if (managedStaffs.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "sub";
-      empty.textContent = "登録されている職員はいません。";
-      staffManageList.appendChild(empty);
-      return;
-    }
-
-    managedStaffs.forEach(function(staff) {
-      const row = document.createElement("div");
-      row.className = "staff-manage-row" + (staff.active ? "" : " inactive");
-
-      const info = document.createElement("div");
-      info.className = "staff-manage-info";
-
-      const name = document.createElement("div");
-      name.className = "staff-manage-name";
-      name.textContent = staff.name;
-
-      const status = document.createElement("div");
-      status.className = "staff-manage-status";
-      status.textContent = staff.active ? "登録中" : "旧非表示データ";
-
-      info.appendChild(name);
-      info.appendChild(status);
-
-      const actions = document.createElement("div");
-      actions.className = "staff-manage-actions";
-
-      const renameBtn = document.createElement("button");
-      renameBtn.type = "button";
-      renameBtn.className = "secondary small-btn";
-      renameBtn.textContent = "名前変更";
-      renameBtn.addEventListener("click", async function() {
-        const nextName = prompt("新しい名前を入力してください。", staff.name);
-        if (nextName === null) return;
-
-        const trimmed = nextName.trim();
-        if (!trimmed) {
-          showMessage("名前を入力してください。", "error");
-          return;
-        }
-
-        const result = await client.rpc("admin_rename_staff", {
-          p_staff_id: staff.id,
-          p_name: trimmed
-        });
-
-        if (result.error) {
-          showMessage("名前を変更できませんでした：" + result.error.message, "error");
-          return;
-        }
-
-        await refreshStaffManagement();
-        showMessage("職員名を変更しました。");
+      const actions=document.createElement("div"); actions.className="staff-manage-actions";
+      const renameBtn=document.createElement("button"); renameBtn.type="button"; renameBtn.className="secondary small-btn"; renameBtn.textContent="名前変更";
+      renameBtn.addEventListener("click",async()=>{
+        const next=prompt("新しい名前を入力してください。",staff.name);
+        if (next===null || !next.trim()) return;
+        const result=await client.rpc("admin_rename_staff",{p_staff_id:staff.id,p_name:next.trim()});
+        if (result.error) { showMessage("名前を変更できませんでした："+result.error.message,"error"); return; }
+        await refreshAll(); showMessage("職員名を変更しました。");
       });
 
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "danger small-btn";
-      deleteBtn.textContent = "削除";
-      deleteBtn.addEventListener("click", async function() {
-        const ok = confirm(
-          staff.name + " さんを削除しますか？\n\n" +
-          "この職員の過去・今後の夜勤希望登録もすべて削除されます。"
-        );
-        if (!ok) return;
-
-        const secondOk = confirm(
-          "本当に削除しますか？ この操作は元に戻せません。"
-        );
-        if (!secondOk) return;
-
-        const result = await client.rpc("admin_delete_staff", {
-          p_staff_id: staff.id
-        });
-
-        if (result.error) {
-          showMessage("削除できませんでした：" + result.error.message, "error");
-          return;
-        }
-
-        await refreshStaffManagement();
-        showMessage(staff.name + " さんを削除しました。");
+      const del=document.createElement("button"); del.type="button"; del.className="danger small-btn"; del.textContent="削除";
+      del.addEventListener("click",async()=>{
+        if (!confirm(staff.name+" さんを削除しますか？\n希望登録もすべて削除されます。")) return;
+        if (!confirm("本当に削除しますか？ この操作は元に戻せません。")) return;
+        const result=await client.rpc("admin_delete_staff",{p_staff_id:staff.id});
+        if (result.error) { showMessage("削除できませんでした："+result.error.message,"error"); return; }
+        await refreshAll(); showMessage(staff.name+" さんを削除しました。");
       });
 
-      actions.appendChild(renameBtn);
-      actions.appendChild(deleteBtn);
-
-      row.appendChild(info);
-      row.appendChild(actions);
-      staffManageList.appendChild(row);
+      actions.appendChild(renameBtn); actions.appendChild(del);
+      row.appendChild(info); row.appendChild(actions); staffManageList.appendChild(row);
     });
-  }
-
-  async function refreshStaffManagement() {
-    await loadStaffs();
-    await loadManagedStaffs();
-    await loadSchedule();
   }
 
   async function loadSchedule() {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const startDate = dateKey(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0).getDate();
-    const endDate = dateKey(year, month, lastDay);
+    const y=currentDate.getFullYear(), m=currentDate.getMonth();
+    const start=dateKey(y,m,1), end=dateKey(y,m,new Date(y,m+1,0).getDate());
 
-    const result = await client.rpc("get_night_schedule", {
-      p_start_date: startDate,
-      p_end_date: endDate
-    });
-
+    let result=await client.rpc("get_shift_schedule",{p_start_date:start,p_end_date:end});
     if (result.error) {
-      showMessage("勤務状況を取得できませんでした：" + result.error.message, "error");
-      return;
+      const fallback=await client.rpc("get_night_schedule",{p_start_date:start,p_end_date:end});
+      if (fallback.error) { showMessage("勤務状況を取得できませんでした："+fallback.error.message,"error"); return; }
+      result={data:(fallback.data || []).map(r=>({...r,shift_pattern:defaultPatternForName(r.staff_name)}))};
     }
 
-    schedule = {};
-    (result.data || []).forEach(function(row) {
-      if (!schedule[row.work_date]) schedule[row.work_date] = [];
+    schedule={};
+    (result.data || []).forEach(row=>{
+      if (!schedule[row.work_date]) schedule[row.work_date]=[];
       schedule[row.work_date].push({
-        staffId: row.staff_id,
-        staffName: row.staff_name
-      });
-    });
-
-    Object.keys(schedule).forEach(function(key) {
-      schedule[key].sort(function(a, b) {
-        return a.staffName.localeCompare(b.staffName, "ja");
+        staffId:row.staff_id,
+        staffName:row.staff_name,
+        shiftPattern:row.shift_pattern || defaultPatternForName(row.staff_name)
       });
     });
 
@@ -576,524 +448,361 @@
   }
 
   function renderCountSummary() {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-
-    countSummaryTitle.textContent =
-      year + "年 " + (month + 1) + "月の登録日数";
-
-    const counts = {};
-
-    Object.values(schedule).forEach(function(dayEntries) {
-      dayEntries.forEach(function(person) {
-        counts[person.staffId] = (counts[person.staffId] || 0) + 1;
-      });
+    const y=currentDate.getFullYear(),m=currentDate.getMonth();
+    countSummaryTitle.textContent=y+"年 "+(m+1)+"月の登録日数";
+    const counts={};
+    Object.values(schedule).forEach(entries=>entries.forEach(p=>counts[p.staffId]=(counts[p.staffId]||0)+1));
+    countSummary.innerHTML="";
+    staffs.forEach(staff=>{
+      const item=document.createElement("div"); item.className="count-summary-item";
+      const n=document.createElement("div"); n.className="count-summary-name"; n.textContent=staff.name;
+      const d=document.createElement("div"); d.className="count-summary-days"; d.textContent=(counts[staff.id]||0)+"日";
+      item.appendChild(n); item.appendChild(d); countSummary.appendChild(item);
     });
-
-    countSummary.innerHTML = "";
-
-    const activeStaffs = managedStaffs.filter(function(staff) {
-      return staff.active;
-    });
-
-    activeStaffs.forEach(function(staff) {
-      const item = document.createElement("div");
-      item.className = "count-summary-item";
-
-      const name = document.createElement("div");
-      name.className = "count-summary-name";
-      name.textContent = staff.name;
-
-      const days = document.createElement("div");
-      days.className = "count-summary-days";
-      days.textContent = (counts[staff.id] || 0) + "日";
-
-      item.appendChild(name);
-      item.appendChild(days);
-      countSummary.appendChild(item);
-    });
-
-    if (activeStaffs.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "sub";
-      empty.textContent = "表示できる職員がいません。";
-      countSummary.appendChild(empty);
-    }
   }
 
   function renderCalendar() {
-    calendar.innerHTML = "";
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    monthTitle.textContent = year + "年 " + (month + 1) + "月";
+    calendar.innerHTML="";
+    const y=currentDate.getFullYear(),m=currentDate.getMonth();
+    monthTitle.textContent=y+"年 "+(m+1)+"月";
+    const first=new Date(y,m,1).getDay(), last=new Date(y,m+1,0).getDate();
 
-    const firstWeekday = new Date(year, month, 1).getDay();
-    const lastDay = new Date(year, month + 1, 0).getDate();
-
-    for (let i = 0; i < firstWeekday; i++) {
-      const empty = document.createElement("div");
-      empty.className = "day empty";
-      calendar.appendChild(empty);
+    for (let i=0;i<first;i++) {
+      const e=document.createElement("div"); e.className="day empty"; calendar.appendChild(e);
     }
 
-    for (let day = 1; day <= lastDay; day++) {
-      const key = dateKey(year, month, day);
-      const weekday = new Date(year, month, day).getDay();
-      const assigned = schedule[key] || [];
-      const holidayName = holidays[key] || "";
-      const isPast = key < todayKey();
-      const isSelected = selectedDates.has(key);
+    for (let day=1;day<=last;day++) {
+      const key=dateKey(y,m,day), weekday=new Date(y,m,day).getDay();
+      const assigned=schedule[key] || [], holiday=holidays[key] || "", past=key<todayKey();
+      const el=document.createElement("div"); el.className="day";
+      if (past) el.classList.add("past");
+      if (assigned.length) el.classList.add("has-registrations");
+      if (selectedDates.has(key)) el.classList.add("selected");
 
-      const el = document.createElement("div");
-      el.className = "day";
-      if (isPast) el.classList.add("past");
-      if (assigned.length > 0) el.classList.add("has-registrations");
-      if (isSelected) el.classList.add("selected");
-      if (holidayName) el.title = holidayName;
+      let dc="";
+      if (weekday===0 || holiday) dc=holiday ? "holiday-date":"sun-date";
+      else if (weekday===6) dc="sat-date";
 
-      let dateClass = "";
-      if (weekday === 0 || holidayName) {
-        dateClass = holidayName ? "holiday-date" : "sun-date";
-      } else if (weekday === 6) {
-        dateClass = "sat-date";
-      }
+      const num=document.createElement("div"); num.className="date-num "+dc; num.textContent=day; el.appendChild(num);
+      const count=document.createElement("div"); count.className="count"; count.textContent=assigned.length+"人登録"; el.appendChild(count);
 
-      const dateNum = document.createElement("div");
-      dateNum.className = "date-num " + dateClass;
-      dateNum.textContent = day;
-      el.appendChild(dateNum);
-
-      const count = document.createElement("div");
-      count.className = "count";
-      count.textContent = assigned.length + "人登録";
-      el.appendChild(count);
-
-      assigned.forEach(function(person) {
-        const tag = document.createElement("button");
-        tag.type = "button";
-        tag.className = "staff-tag";
-        tag.textContent = person.staffName;
-        tag.addEventListener("click", function(event) {
-          event.stopPropagation();
-          openEdit(key, person);
-        });
+      assigned.forEach(person=>{
+        const tag=document.createElement("button"); tag.type="button"; tag.className="staff-tag";
+        tag.textContent=person.staffName+" "+patternLabel(person.shiftPattern);
+        tag.addEventListener("click",ev=>{ev.stopPropagation();openEdit(key,person);});
         el.appendChild(tag);
       });
 
-      if (isSelected) {
-        const mark = document.createElement("div");
-        mark.className = "selected-mark";
-        mark.textContent = "✓ 選択中";
-        el.appendChild(mark);
+      if (selectedDates.has(key)) {
+        const mark=document.createElement("div"); mark.className="selected-mark"; mark.textContent="✓ 選択中"; el.appendChild(mark);
       }
 
-      if (!isPast) {
-        el.addEventListener("click", function() {
-          if (selectedDates.has(key)) {
-            selectedDates.delete(key);
-          } else {
-            selectedDates.add(key);
-          }
+      if (!past) {
+        el.addEventListener("click",()=>{
+          if (selectedDates.has(key)) selectedDates.delete(key); else selectedDates.add(key);
           renderCalendar();
         });
       }
-
       calendar.appendChild(el);
     }
+    updateRegisterArea();
+  }
 
+  function updateAdminPattern() {
+    const staff=staffs.find(s=>String(s.id)===String(staffSelect.value));
+    fillPatternSelect(adminPatternSelect,staff ? staff.name : "",null);
     updateRegisterArea();
   }
 
   function updateRegisterArea() {
-    const staffId = staffSelect.value;
-    const dates = Array.from(selectedDates);
-
-    if (!staffId) {
-      selectedInfo.textContent = "先に職員名を選択してください";
-      registerBtn.disabled = true;
-      return;
-    }
-
-    if (dates.length === 0) {
-      selectedInfo.textContent = "日付を選択してください";
-      registerBtn.disabled = true;
-      return;
-    }
-
-    const newDates = dates.filter(function(d) {
-      return !(schedule[d] || []).some(function(person) {
-        return person.staffId === staffId;
-      });
+    const staff=staffs.find(s=>String(s.id)===String(staffSelect.value));
+    const dates=Array.from(selectedDates);
+    if (!staff) { selectedInfo.textContent="先に職員名を選択してください"; registerBtn.disabled=true; return; }
+    if (!dates.length) { selectedInfo.textContent="日付を選択してください"; registerBtn.disabled=true; return; }
+    const pattern=adminPatternSelect.value;
+    const targets=dates.filter(d=>{
+      const own=(schedule[d]||[]).find(p=>String(p.staffId)===String(staff.id));
+      return !own || own.shiftPattern!==pattern;
     });
-
-    selectedInfo.textContent = newDates.length + "日を新規登録";
-    registerBtn.disabled = newDates.length === 0;
+    selectedInfo.textContent=targets.length+"日を登録・変更";
+    registerBtn.disabled=!targets.length || !pattern;
   }
 
-  function openEdit(workDate, person) {
-    selectedRegistration = {
-      workDate: workDate,
-      staffId: person.staffId,
-      staffName: person.staffName
-    };
+  async function registerOne(staffId,workDate,pattern) {
+    return await client.rpc("register_shift_request",{
+      p_staff_id:staffId,p_work_date:workDate,p_shift_pattern:pattern
+    });
+  }
+  async function cancelOne(staffId,workDate) {
+    return await client.rpc("cancel_night",{p_staff_id:staffId,p_work_date:workDate});
+  }
 
-    editOriginal.textContent = workDate + "　" + person.staffName;
-    editStaff.value = person.staffId;
-    editDate.value = workDate;
-    editDate.min = todayKey();
+  function openEdit(workDate,person) {
+    selectedRegistration={workDate,staffId:person.staffId,staffName:person.staffName,shiftPattern:person.shiftPattern};
+    editOriginal.textContent=workDate+"　"+person.staffName+"　"+patternLabel(person.shiftPattern);
+    editStaff.value=person.staffId;
+    editDate.value=workDate;
+    editDate.min=todayKey();
+    fillPatternSelect(editPattern,person.staffName,person.shiftPattern);
     editCard.classList.remove("hidden");
-    editCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    editCard.scrollIntoView({behavior:"smooth",block:"start"});
   }
+  function closeEdit() { selectedRegistration=null; editCard.classList.add("hidden"); }
 
-  function closeEdit() {
-    selectedRegistration = null;
-    editCard.classList.add("hidden");
-  }
-
-  async function registerOne(staffId, workDate) {
-    return await client.rpc("register_night", {
-      p_staff_id: staffId,
-      p_work_date: workDate
-    });
-  }
-
-  async function cancelOne(staffId, workDate) {
-    return await client.rpc("cancel_night", {
-      p_staff_id: staffId,
-      p_work_date: workDate
-    });
-  }
-
-  loginBtn.addEventListener("click", async function() {
-    const password = adminPassword.value;
-    if (!password) {
-      showMessage("管理者パスワードを入力してください。", "error");
-      return;
-    }
-
-    loginBtn.disabled = true;
-    loginBtn.textContent = "確認中...";
-
-    const result = await client.auth.signInWithPassword({
-      email: ADMIN_EMAIL,
-      password: password
-    });
-
-    loginBtn.disabled = false;
-    loginBtn.textContent = "ログイン";
-
-    if (result.error) {
-      showMessage("パスワードが違います。", "error");
-      return;
-    }
-
-    adminPassword.value = "";
-    await enterAdmin();
-  });
-
-  adminPassword.addEventListener("keydown", function(event) {
-    if (event.key === "Enter") loginBtn.click();
-  });
-
-  logoutBtn.addEventListener("click", async function() {
-    await client.auth.signOut();
-    adminView.classList.add("hidden");
-    loginView.classList.remove("hidden");
-    selectedDates.clear();
-    closeEdit();
-  });
-
-  addStaffBtn.addEventListener("click", async function() {
-    const name = newStaffName.value.trim();
-
-    if (!name) {
-      showMessage("追加する職員名を入力してください。", "error");
-      return;
-    }
-
-    addStaffBtn.disabled = true;
-    addStaffBtn.textContent = "追加中...";
-
-    const result = await client.rpc("admin_add_staff", {
-      p_name: name
-    });
-
-    addStaffBtn.disabled = false;
-    addStaffBtn.textContent = "職員を追加";
-
-    if (result.error) {
-      showMessage("職員を追加できませんでした：" + result.error.message, "error");
-      return;
-    }
-
-    newStaffName.value = "";
-    await refreshStaffManagement();
-    showMessage(name + " さんを追加しました。");
-  });
-
-  newStaffName.addEventListener("keydown", function(event) {
-    if (event.key === "Enter") addStaffBtn.click();
-  });
-
-  function normalizeStaffName(name) {
-    return String(name || "")
-      .replace(/[\s　]+/g, "")
-      .replace(/\([^)]*\)/g, "")
-      .trim();
-  }
-
-  syncYankeesStaffBtn.addEventListener("click", async function() {
-    const targets = [
-      { name: "内藤 昌子", aliases: ["内藤", "内藤昌子"] },
-      { name: "前川 良司", aliases: ["前川", "前川良司"] },
-      { name: "鹿島 佑斗", aliases: ["鹿島", "鹿島佑斗"] },
-      { name: "鎌田 フサ子", aliases: ["鎌田", "鎌田フサ子"] }
-    ];
-
-    const ok = confirm(
-      "ヤンキースのシフト表に載っている夜勤職員4名に名前を揃えますか？"
-    );
-    if (!ok) return;
-
-    syncYankeesStaffBtn.disabled = true;
-    syncYankeesStaffBtn.textContent = "反映中...";
-
-    const current = await client.rpc("admin_list_staffs");
-    if (current.error) {
-      syncYankeesStaffBtn.disabled = false;
-      syncYankeesStaffBtn.textContent = "シフト表の夜勤職員4名を反映";
-      showMessage("職員一覧を取得できませんでした：" + current.error.message, "error");
-      return;
-    }
-
-    let changed = 0;
-    let failed = 0;
-    let rows = current.data || [];
-
-    for (const target of targets) {
-      const targetNorm = normalizeStaffName(target.name);
-      const aliases = target.aliases.map(normalizeStaffName);
-
-      let exact = rows.find(function(staff) {
-        return normalizeStaffName(staff.name) === targetNorm;
-      });
-
-      if (exact) continue;
-
-      let alias = rows.find(function(staff) {
-        const n = normalizeStaffName(staff.name);
-        return aliases.includes(n);
-      });
-
-      if (alias) {
-        const renameResult = await client.rpc("admin_rename_staff", {
-          p_staff_id: alias.id,
-          p_name: target.name
-        });
-
-        if (renameResult.error) {
-          failed++;
-        } else {
-          alias.name = target.name;
-          changed++;
-        }
-      } else {
-        const addResult = await client.rpc("admin_add_staff", {
-          p_name: target.name
-        });
-
-        if (addResult.error) {
-          failed++;
-        } else {
-          changed++;
-          const refreshed = await client.rpc("admin_list_staffs");
-          if (!refreshed.error) rows = refreshed.data || rows;
-        }
-      }
-    }
-
-    syncYankeesStaffBtn.disabled = false;
-    syncYankeesStaffBtn.textContent = "シフト表の夜勤職員4名を反映";
-
-    await refreshStaffManagement();
-
-    showMessage(
-      failed === 0
-        ? "夜勤職員4名をシフト表の名前に揃えました。"
-        : "名前を反映しましたが、" + failed + "件は反映できませんでした。",
-      failed === 0 ? "ok" : "error"
-    );
-  });
-
-  staffSelect.addEventListener("change", function() {
-    updateRegisterArea();
-  });
-
-  registerBtn.addEventListener("click", async function() {
-    const staffId = staffSelect.value;
-    if (!staffId) return;
-
-    const dates = Array.from(selectedDates).filter(function(d) {
-      return !(schedule[d] || []).some(function(person) {
-        return person.staffId === staffId;
-      });
-    });
-
-    if (dates.length === 0) return;
-
-    registerBtn.disabled = true;
-    registerBtn.textContent = "登録中...";
-
-    let success = 0;
-    let failed = 0;
-
-    for (const workDate of dates) {
-      const result = await registerOne(staffId, workDate);
-      if (result.error) failed++;
-      else success++;
-    }
-
-    selectedDates.clear();
-    await loadSchedule();
-
-    registerBtn.textContent = "選択した日に登録";
-    showMessage(
-      failed === 0
-        ? success + "日分を登録しました。"
-        : success + "日登録、" + failed + "日は登録できませんでした。",
-      failed === 0 ? "ok" : "error"
-    );
-  });
-
-  changeBtn.addEventListener("click", async function() {
-    if (!selectedRegistration) return;
-
-    const newStaffId = editStaff.value;
-    const newDate = editDate.value;
-
-    if (!newStaffId || !newDate) {
-      showMessage("変更後の職員名と日付を選択してください。", "error");
-      return;
-    }
-
-    if (newDate < todayKey()) {
-      showMessage("過去の日付への変更はできません。", "error");
-      return;
-    }
-
-    const oldStaffId = selectedRegistration.staffId;
-    const oldDate = selectedRegistration.workDate;
-
-    if (newStaffId === oldStaffId && newDate === oldDate) {
-      showMessage("変更内容がありません。", "error");
-      return;
-    }
-
-    const already = (schedule[newDate] || []).some(function(person) {
-      return person.staffId === newStaffId;
-    });
-
-    if (already) {
-      showMessage("変更先には、その職員がすでに登録されています。", "error");
-      return;
-    }
-
-    changeBtn.disabled = true;
-    changeBtn.textContent = "変更中...";
-
-    const addResult = await registerOne(newStaffId, newDate);
-
-    if (addResult.error) {
-      changeBtn.disabled = false;
-      changeBtn.textContent = "変更する";
-      showMessage("変更先へ登録できませんでした：" + addResult.error.message, "error");
-      return;
-    }
-
-    const removeResult = await cancelOne(oldStaffId, oldDate);
-
-    if (removeResult.error) {
-      await cancelOne(newStaffId, newDate);
-      changeBtn.disabled = false;
-      changeBtn.textContent = "変更する";
-      showMessage("元の登録を取り消せなかったため、変更を元に戻しました。", "error");
-      return;
-    }
-
-    changeBtn.disabled = false;
-    changeBtn.textContent = "変更する";
-    closeEdit();
-    await loadSchedule();
-    showMessage("登録を変更しました。");
-  });
-
-  cancelRegistrationBtn.addEventListener("click", async function() {
-    if (!selectedRegistration) return;
-
-    const ok = confirm(
-      selectedRegistration.workDate + " の " + selectedRegistration.staffName + " さんの登録を取り消しますか？"
-    );
-    if (!ok) return;
-
-    cancelRegistrationBtn.disabled = true;
-    cancelRegistrationBtn.textContent = "取消中...";
-
-    const result = await cancelOne(
-      selectedRegistration.staffId,
-      selectedRegistration.workDate
-    );
-
-    cancelRegistrationBtn.disabled = false;
-    cancelRegistrationBtn.textContent = "この登録を取り消す";
-
-    if (result.error) {
-      showMessage("取り消せませんでした：" + result.error.message, "error");
-      return;
-    }
-
-    closeEdit();
-    await loadSchedule();
-    showMessage("登録を取り消しました。");
-  });
-
-  closeEditBtn.addEventListener("click", closeEdit);
-
-  document.getElementById("prevMonth").addEventListener("click", async function() {
-    currentDate.setMonth(currentDate.getMonth() - 1);
-    selectedDates.clear();
-    closeEdit();
-    await loadSchedule();
-  });
-
-  document.getElementById("nextMonth").addEventListener("click", async function() {
-    currentDate.setMonth(currentDate.getMonth() + 1);
-    selectedDates.clear();
-    closeEdit();
-    await loadSchedule();
-  });
-
-  async function enterAdmin() {
-    loginView.classList.add("hidden");
-    adminView.classList.remove("hidden");
-    await loadHolidays();
+  async function refreshAll() {
     await loadStaffs();
     await loadManagedStaffs();
     await loadSchedule();
   }
 
-  async function start() {
-    const result = await client.auth.getSession();
-    const session = result.data.session;
+  loginBtn.addEventListener("click",async()=>{
+    const password=adminPassword.value;
+    if (!password) { showMessage("管理者パスワードを入力してください。","error"); return; }
+    loginBtn.disabled=true; loginBtn.textContent="確認中...";
+    const result=await client.auth.signInWithPassword({email:ADMIN_EMAIL,password});
+    loginBtn.disabled=false; loginBtn.textContent="ログイン";
+    if (result.error) { showMessage("パスワードが違います。","error"); return; }
+    adminPassword.value=""; await enterAdmin();
+  });
+  adminPassword.addEventListener("keydown",e=>{if(e.key==="Enter")loginBtn.click();});
+  logoutBtn.addEventListener("click",async()=>{
+    await client.auth.signOut(); adminView.classList.add("hidden"); loginView.classList.remove("hidden");
+    selectedDates.clear(); closeEdit();
+  });
 
-    if (session && session.user && session.user.email === ADMIN_EMAIL) {
-      await enterAdmin();
-    } else {
-      if (session) await client.auth.signOut();
-      loginView.classList.remove("hidden");
-      adminView.classList.add("hidden");
+  addStaffBtn.addEventListener("click",async()=>{
+    const name=newStaffName.value.trim();
+    if (!name) { showMessage("追加する職員名を入力してください。","error"); return; }
+    const result=await client.rpc("admin_add_staff",{p_name:name});
+    if (result.error) { showMessage("職員を追加できませんでした："+result.error.message,"error"); return; }
+    newStaffName.value=""; await refreshAll(); showMessage(name+" さんを追加しました。");
+  });
+  newStaffName.addEventListener("keydown",e=>{if(e.key==="Enter")addStaffBtn.click();});
+
+  syncYankeesStaffBtn.addEventListener("click",async()=>{
+    if (!confirm("ヤンキースの入力対象7名をシフト表の名前に揃えますか？")) return;
+    syncYankeesStaffBtn.disabled=true; syncYankeesStaffBtn.textContent="反映中...";
+    const current=await client.rpc("admin_list_staffs");
+    if (current.error) {
+      syncYankeesStaffBtn.disabled=false; syncYankeesStaffBtn.textContent="シフト表の入力対象7名を反映";
+      showMessage("職員一覧を取得できませんでした："+current.error.message,"error"); return;
     }
+    let rows=current.data || [], failed=0;
+    for (const target of SYNC_TARGETS) {
+      const targetNorm=normalizeStaffName(target.name), aliases=target.aliases.map(normalizeStaffName);
+      const exact=rows.find(s=>normalizeStaffName(s.name)===targetNorm);
+      if (exact) continue;
+      const alias=rows.find(s=>aliases.includes(normalizeStaffName(s.name)));
+      if (alias) {
+        const rr=await client.rpc("admin_rename_staff",{p_staff_id:alias.id,p_name:target.name});
+        if (rr.error) failed++; else alias.name=target.name;
+      } else {
+        const ar=await client.rpc("admin_add_staff",{p_name:target.name});
+        if (ar.error) failed++;
+        const refreshed=await client.rpc("admin_list_staffs");
+        if (!refreshed.error) rows=refreshed.data || rows;
+      }
+    }
+    syncYankeesStaffBtn.disabled=false; syncYankeesStaffBtn.textContent="シフト表の入力対象7名を反映";
+    await refreshAll();
+    showMessage(failed===0 ? "入力対象7名を反映しました。" : failed+"件は反映できませんでした。",failed===0?"ok":"error");
+  });
+
+  staffSelect.addEventListener("change",updateAdminPattern);
+  adminPatternSelect.addEventListener("change",updateRegisterArea);
+
+  registerBtn.addEventListener("click",async()=>{
+    const staff=staffs.find(s=>String(s.id)===String(staffSelect.value));
+    if (!staff) return;
+    const pattern=adminPatternSelect.value;
+    const dates=Array.from(selectedDates).filter(d=>{
+      const own=(schedule[d]||[]).find(p=>String(p.staffId)===String(staff.id));
+      return !own || own.shiftPattern!==pattern;
+    });
+    if (!dates.length || !pattern) return;
+
+    registerBtn.disabled=true; registerBtn.textContent="登録中...";
+    let success=0,failed=0;
+    for (const d of dates) {
+      const r=await registerOne(staff.id,d,pattern);
+      if (r.error) failed++; else success++;
+    }
+    selectedDates.clear(); await loadSchedule(); registerBtn.textContent="選択した日に登録";
+    showMessage(failed===0 ? success+"日分を登録しました。" : success+"日登録、"+failed+"日は登録できませんでした。",failed===0?"ok":"error");
+  });
+
+  editStaff.addEventListener("change",()=>{
+    const staff=staffs.find(s=>String(s.id)===String(editStaff.value));
+    fillPatternSelect(editPattern,staff ? staff.name : "",null);
+  });
+
+  changeBtn.addEventListener("click",async()=>{
+    if (!selectedRegistration) return;
+    const newStaff=staffs.find(s=>String(s.id)===String(editStaff.value));
+    const newDate=editDate.value, newPattern=editPattern.value;
+    if (!newStaff || !newDate || !newPattern) { showMessage("変更後の内容を選択してください。","error"); return; }
+    if (newDate<todayKey()) { showMessage("過去の日付への変更はできません。","error"); return; }
+
+    const old=selectedRegistration;
+    if (String(newStaff.id)===String(old.staffId) && newDate===old.workDate) {
+      if (newPattern===old.shiftPattern) { showMessage("変更内容がありません。","error"); return; }
+      const r=await registerOne(newStaff.id,newDate,newPattern);
+      if (r.error) { showMessage("変更できませんでした："+r.error.message,"error"); return; }
+      closeEdit(); await loadSchedule(); showMessage("勤務内容を変更しました。"); return;
+    }
+
+    const already=(schedule[newDate]||[]).some(p=>String(p.staffId)===String(newStaff.id));
+    if (already) { showMessage("変更先には、その職員がすでに登録されています。","error"); return; }
+
+    const add=await registerOne(newStaff.id,newDate,newPattern);
+    if (add.error) { showMessage("変更先へ登録できませんでした："+add.error.message,"error"); return; }
+    const remove=await cancelOne(old.staffId,old.workDate);
+    if (remove.error) {
+      await cancelOne(newStaff.id,newDate);
+      showMessage("元の登録を取り消せなかったため、変更を元に戻しました。","error"); return;
+    }
+    closeEdit(); await loadSchedule(); showMessage("登録を変更しました。");
+  });
+
+  cancelRegistrationBtn.addEventListener("click",async()=>{
+    if (!selectedRegistration) return;
+    if (!confirm(selectedRegistration.workDate+" の "+selectedRegistration.staffName+" さんの登録を取り消しますか？")) return;
+    const r=await cancelOne(selectedRegistration.staffId,selectedRegistration.workDate);
+    if (r.error) { showMessage("取り消せませんでした："+r.error.message,"error"); return; }
+    closeEdit(); await loadSchedule(); showMessage("登録を取り消しました。");
+  });
+  closeEditBtn.addEventListener("click",closeEdit);
+
+  document.getElementById("prevMonth").addEventListener("click",async()=>{
+    currentDate.setMonth(currentDate.getMonth()-1); selectedDates.clear(); closeEdit(); await loadSchedule();
+  });
+  document.getElementById("nextMonth").addEventListener("click",async()=>{
+    currentDate.setMonth(currentDate.getMonth()+1); selectedDates.clear(); closeEdit(); await loadSchedule();
+  });
+
+  function cellText(cell) {
+    const v=cell.value;
+    if (v===null || v===undefined) return "";
+    if (typeof v==="object") {
+      if (Array.isArray(v.richText)) return v.richText.map(x=>x.text || "").join("");
+      if (v.text!==undefined) return String(v.text);
+      if (v.result!==undefined && v.result!==null) return String(v.result);
+    }
+    return String(v);
+  }
+  function findRow(ws,target,start,end) {
+    const norm=normalizeStaffName(target);
+    for (let r=start;r<=Math.min(end,ws.rowCount);r++) {
+      if (normalizeStaffName(cellText(ws.getCell(r,1)))===norm) return r;
+    }
+    return null;
+  }
+  function findRegistrationByNameDate(name,key) {
+    const norm=normalizeStaffName(name);
+    return (schedule[key] || []).find(p=>normalizeStaffName(p.staffName)===norm) || null;
   }
 
+  excelExportBtn.addEventListener("click",async()=>{
+    const file=excelFile.files && excelFile.files[0];
+    if (!file) { showMessage("先にヤンキースのシフトExcelを選択してください。","error"); return; }
+    if (typeof ExcelJS==="undefined") { showMessage("Excel処理ライブラリを読み込めませんでした。","error"); return; }
+
+    excelExportBtn.disabled=true; excelExportBtn.textContent="Excel作成中...";
+
+    try {
+      const arrayBuffer=await file.arrayBuffer();
+      const workbook=new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
+      const ws=workbook.worksheets[0];
+      if (!ws) throw new Error("シートが見つかりません。");
+
+      const y=currentDate.getFullYear(), m=currentDate.getMonth(), month=m+1;
+      const title=cellText(ws.getCell(1,1));
+      if (title && !title.includes(month+"月")) {
+        const go=confirm("選択したExcelの月と、画面で表示中の "+month+"月 が違う可能性があります。\nそのまま反映しますか？");
+        if (!go) { excelExportBtn.disabled=false; excelExportBtn.textContent="この月の希望を反映してExcel出力"; return; }
+      }
+
+      const dayRows={
+        "藤井亮輔":findRow(ws,"藤井亮輔",1,13),
+        "桑原莉子":findRow(ws,"桑原莉子",1,13),
+        "古垣竜也":findRow(ws,"古垣竜也",1,13)
+      };
+      const kamadaDayRow=findRow(ws,"鎌田フサ子",1,13);
+      const nightRows={
+        "内藤昌子":findRow(ws,"内藤昌子",13,22),
+        "前川良司":findRow(ws,"前川良司",13,22),
+        "鹿島佑斗":findRow(ws,"鹿島佑斗",13,22),
+        "鎌田フサ子":findRow(ws,"鎌田フサ子",13,22)
+      };
+
+      const missing=[];
+      Object.entries(dayRows).forEach(([n,r])=>{if(!r)missing.push(n);});
+      Object.entries(nightRows).forEach(([n,r])=>{if(!r)missing.push(n);});
+      if (!kamadaDayRow) missing.push("鎌田フサ子(夜勤兼務)");
+      if (missing.length) throw new Error("シフト表で職員行を確認できません："+missing.join("、"));
+
+      const lastDay=new Date(y,m+1,0).getDate();
+
+      for (const [name,row] of Object.entries(dayRows)) {
+        for (let day=1;day<=lastDay;day++) {
+          const key=dateKey(y,m,day);
+          const reg=findRegistrationByNameDate(name,key);
+          if (reg && reg.shiftPattern==="OFF") ws.getCell(row,day+1).value="公休";
+        }
+      }
+
+      for (const row of Object.values(nightRows)) {
+        for (let day=1;day<=lastDay;day++) ws.getCell(row,day+1).value="公休";
+      }
+      for (let day=1;day<=lastDay;day++) ws.getCell(kamadaDayRow,day+1).value="公休";
+
+      for (const [name,row] of Object.entries(nightRows)) {
+        for (let day=1;day<=lastDay;day++) {
+          const key=dateKey(y,m,day);
+          const reg=findRegistrationByNameDate(name,key);
+          if (!reg) continue;
+
+          if (name==="鎌田フサ子" && reg.shiftPattern==="07:00-10:00") {
+            ws.getCell(kamadaDayRow,day+1).value=excelPattern(reg.shiftPattern);
+            ws.getCell(row,day+1).value="公休";
+          } else {
+            const label=excelPattern(reg.shiftPattern || defaultPatternForName(name));
+            if (label) ws.getCell(row,day+1).value=label;
+          }
+        }
+      }
+
+      const out=await workbook.xlsx.writeBuffer();
+      const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download="ヤンキースシフト_"+y+"年"+month+"月_希望反映.xlsx";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+      showMessage("Excelへ希望を反映しました。");
+    } catch(error) {
+      showMessage("Excelへ反映できませんでした："+(error.message || error),"error");
+    } finally {
+      excelExportBtn.disabled=false;
+      excelExportBtn.textContent="この月の希望を反映してExcel出力";
+    }
+  });
+
+  async function enterAdmin() {
+    loginView.classList.add("hidden"); adminView.classList.remove("hidden");
+    await loadHolidays(); await loadStaffs(); await loadManagedStaffs(); await loadSchedule();
+  }
+  async function start() {
+    const result=await client.auth.getSession();
+    const session=result.data.session;
+    if (session && session.user && session.user.email===ADMIN_EMAIL) await enterAdmin();
+    else {
+      if (session) await client.auth.signOut();
+      loginView.classList.remove("hidden"); adminView.classList.add("hidden");
+    }
+  }
   start();
 </script>
 </body>
