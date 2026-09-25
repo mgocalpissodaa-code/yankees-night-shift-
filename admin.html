@@ -555,23 +555,69 @@
     updateRegisterArea();
   }
 
+  function getBulkCancelTarget() {
+    const dates=Array.from(selectedDates);
+    if (!dates.length) return null;
+
+    const explicitlySelected=staffs.find(s=>String(s.id)===String(staffSelect.value));
+    if (explicitlySelected) {
+      const ownDates=dates.filter(d=>
+        (schedule[d]||[]).some(p=>String(p.staffId)===String(explicitlySelected.id))
+      );
+      if (ownDates.length) return {staff:explicitlySelected, dates:ownDates};
+    }
+
+    const registrations=[];
+    dates.forEach(d=>{
+      (schedule[d]||[]).forEach(p=>{
+        registrations.push({date:d, staffId:p.staffId, staffName:p.staffName});
+      });
+    });
+
+    const ids=[...new Set(registrations.map(x=>String(x.staffId)))];
+    if (ids.length!==1) return null;
+
+    const onlyId=ids[0];
+    const matchedStaff=
+      staffs.find(s=>String(s.id)===onlyId) ||
+      {id:onlyId,name:registrations[0].staffName};
+
+    const ownDates=[...new Set(
+      registrations
+        .filter(x=>String(x.staffId)===onlyId)
+        .map(x=>x.date)
+    )];
+
+    return ownDates.length ? {staff:matchedStaff, dates:ownDates} : null;
+  }
+
   function updateRegisterArea() {
     const staff=staffs.find(s=>String(s.id)===String(staffSelect.value));
     const dates=Array.from(selectedDates);
+    const bulkTarget=getBulkCancelTarget();
 
-    if (!staff) {
-      selectedInfo.textContent="先に職員名を選択してください";
-      registerBtn.disabled=true;
+    if (bulkTarget) {
+      const name=displayStaffName(bulkTarget.staff.name);
+      bulkCancelBarInfo.textContent=name+"さんの登録を "+bulkTarget.dates.length+"日 選択中";
+      bulkCancelBtn.disabled=false;
+      bulkCancelBtn.textContent="選択した登録をまとめて取り消す（"+bulkTarget.dates.length+"日）";
+      bulkCancelBar.classList.remove("hidden");
+    } else {
       bulkCancelBtn.disabled=true;
       bulkCancelBar.classList.add("hidden");
+    }
+
+    if (!staff) {
+      selectedInfo.textContent=dates.length
+        ? dates.length+"日選択中"
+        : "先に職員名を選択してください";
+      registerBtn.disabled=true;
       return;
     }
 
     if (!dates.length) {
       selectedInfo.textContent="日付を選択してください";
       registerBtn.disabled=true;
-      bulkCancelBtn.disabled=true;
-      bulkCancelBar.classList.add("hidden");
       return;
     }
 
@@ -587,17 +633,6 @@
     selectedInfo.textContent=
       dates.length+"日選択中 / 登録・変更 "+targets.length+"日 / 取消 "+ownDates.length+"日";
     registerBtn.disabled=!targets.length || !pattern;
-
-    if (ownDates.length > 0) {
-      const name=displayStaffName(staff.name);
-      bulkCancelBarInfo.textContent=name+"さんの登録を "+ownDates.length+"日 選択中";
-      bulkCancelBtn.disabled=false;
-      bulkCancelBtn.textContent="選択した登録をまとめて取り消す（"+ownDates.length+"日）";
-      bulkCancelBar.classList.remove("hidden");
-    } else {
-      bulkCancelBtn.disabled=true;
-      bulkCancelBar.classList.add("hidden");
-    }
   }
 
   async function registerOne(staffId,workDate,pattern) {
@@ -678,15 +713,16 @@
   });
 
   bulkCancelBtn.addEventListener("click",async()=>{
-    const staff=staffs.find(s=>String(s.id)===String(staffSelect.value));
-    if (!staff) return;
+    const target=getBulkCancelTarget();
+    if (!target) {
+      showMessage("複数の職員が含まれる場合は、上の職員名を選択してください。","error");
+      return;
+    }
 
-    const dates=Array.from(selectedDates).filter(d=>
-      (schedule[d]||[]).some(p=>String(p.staffId)===String(staff.id))
-    );
-    if (!dates.length) return;
-
+    const staff=target.staff;
+    const dates=target.dates;
     const name=displayStaffName(staff.name);
+
     if (!confirm(name+"さんの登録を"+dates.length+"日分まとめて取り消しますか？")) return;
 
     bulkCancelBtn.disabled=true;
@@ -699,7 +735,6 @@
     });
 
     if (result.error) {
-      bulkCancelBtn.disabled=false;
       updateRegisterArea();
       showMessage("一括取消できませんでした："+result.error.message,"error");
       return;
