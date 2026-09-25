@@ -105,17 +105,21 @@
     .count-summary-days { font-size:20px; font-weight:900; color:#2563eb; }
     .excel-box { padding:12px; border-radius:12px; background:#f8fafc; margin-top:10px; }
     .bulk-cancel-bar {
-      position:fixed;
-      left:50%;
-      transform:translateX(-50%);
-      bottom:max(10px, env(safe-area-inset-bottom));
-      width:min(calc(100% - 20px), 880px);
-      z-index:60;
-      background:rgba(255,255,255,.98);
+      margin-top:12px;
+      background:#fff;
       border:1px solid #fecaca;
       border-radius:16px;
       padding:10px;
-      box-shadow:0 8px 28px rgba(0,0,0,.18);
+      box-shadow:0 4px 18px rgba(0,0,0,.10);
+      position:relative;
+      z-index:5;
+      pointer-events:auto;
+    }
+    #bulkCancelBtn {
+      min-height:58px;
+      touch-action:manipulation;
+      pointer-events:auto;
+      -webkit-tap-highlight-color:rgba(185,28,28,.15);
     }
     .bulk-cancel-info {
       text-align:center;
@@ -230,6 +234,12 @@
         <div class="weekday sat">土</div>
       </div>
       <div id="calendar" class="calendar"></div>
+      <div id="bulkCancelBar" class="bulk-cancel-bar hidden">
+        <div id="bulkCancelBarInfo" class="bulk-cancel-info"></div>
+        <button id="bulkCancelBtn" type="button" class="danger full" disabled>
+          選択した登録をまとめて取り消す
+        </button>
+      </div>
     </div>
 
     <div id="editCard" class="card hidden">
@@ -256,12 +266,6 @@
       <button id="closeEditBtn" class="secondary full" style="margin-top:10px;">閉じる</button>
     </div>
 
-    <div id="bulkCancelBar" class="bulk-cancel-bar hidden">
-      <div id="bulkCancelBarInfo" class="bulk-cancel-info"></div>
-      <button id="bulkCancelBtn" class="danger full" disabled>
-        選択した登録をまとめて取り消す
-      </button>
-    </div>
   </div>
 </div>
 
