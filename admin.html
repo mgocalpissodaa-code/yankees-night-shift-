@@ -159,9 +159,6 @@
         </div>
         <button id="addStaffBtn" class="success">職員を追加</button>
       </div>
-      <button id="syncYankeesStaffBtn" class="secondary full" type="button" style="margin-top:10px;">
-        シフト表の入力対象7名を反映
-      </button>
       <div id="staffManageList" class="staff-manage-list"></div>
     </div>
 
@@ -265,16 +262,6 @@
     }
   };
 
-  const SYNC_TARGETS = [
-    {name:"藤井 亮輔",aliases:["藤井","藤井亮輔"]},
-    {name:"桑原 莉子",aliases:["桑原","桑原莉子"]},
-    {name:"古垣 竜也",aliases:["古垣","古垣竜也"]},
-    {name:"内藤 昌子",aliases:["内藤","内藤昌子"]},
-    {name:"前川 良司",aliases:["前川","前川良司"]},
-    {name:"鹿島 佑斗",aliases:["鹿島","鹿島佑斗"]},
-    {name:"鎌田 フサ子",aliases:["鎌田","鎌田フサ子"]}
-  ];
-
   let currentDate = new Date();
   currentDate.setDate(1);
   let staffs = [];
@@ -306,7 +293,6 @@
   const closeEditBtn = document.getElementById("closeEditBtn");
   const newStaffName = document.getElementById("newStaffName");
   const addStaffBtn = document.getElementById("addStaffBtn");
-  const syncYankeesStaffBtn = document.getElementById("syncYankeesStaffBtn");
   const staffManageList = document.getElementById("staffManageList");
   const countSummaryTitle = document.getElementById("countSummaryTitle");
   const countSummary = document.getElementById("countSummary");
@@ -604,35 +590,6 @@
     newStaffName.value=""; await refreshAll(); showMessage(name+" さんを追加しました。");
   });
   newStaffName.addEventListener("keydown",e=>{if(e.key==="Enter")addStaffBtn.click();});
-
-  syncYankeesStaffBtn.addEventListener("click",async()=>{
-    if (!confirm("ヤンキースの入力対象7名をシフト表の名前に揃えますか？")) return;
-    syncYankeesStaffBtn.disabled=true; syncYankeesStaffBtn.textContent="反映中...";
-    const current=await client.rpc("admin_list_staffs");
-    if (current.error) {
-      syncYankeesStaffBtn.disabled=false; syncYankeesStaffBtn.textContent="シフト表の入力対象7名を反映";
-      showMessage("職員一覧を取得できませんでした："+current.error.message,"error"); return;
-    }
-    let rows=current.data || [], failed=0;
-    for (const target of SYNC_TARGETS) {
-      const targetNorm=normalizeStaffName(target.name), aliases=target.aliases.map(normalizeStaffName);
-      const exact=rows.find(s=>normalizeStaffName(s.name)===targetNorm);
-      if (exact) continue;
-      const alias=rows.find(s=>aliases.includes(normalizeStaffName(s.name)));
-      if (alias) {
-        const rr=await client.rpc("admin_rename_staff",{p_staff_id:alias.id,p_name:target.name});
-        if (rr.error) failed++; else alias.name=target.name;
-      } else {
-        const ar=await client.rpc("admin_add_staff",{p_name:target.name});
-        if (ar.error) failed++;
-        const refreshed=await client.rpc("admin_list_staffs");
-        if (!refreshed.error) rows=refreshed.data || rows;
-      }
-    }
-    syncYankeesStaffBtn.disabled=false; syncYankeesStaffBtn.textContent="シフト表の入力対象7名を反映";
-    await refreshAll();
-    showMessage(failed===0 ? "入力対象7名を反映しました。" : failed+"件は反映できませんでした。",failed===0?"ok":"error");
-  });
 
   staffSelect.addEventListener("change",updateAdminPattern);
   adminPatternSelect.addEventListener("change",updateRegisterArea);
