@@ -965,7 +965,7 @@
     let match=selfClosing.exec(sheetXml);
 
     function build(attrs) {
-      attrs=attrs.replace(/\\s+t="[^"]*"/g,"");
+      attrs=attrs.replace(/\s+t="[^"]*"/g,"");
       const typeAttr=typeValue ? ' t="'+typeValue+'"' : "";
       return '<c'+attrs+typeAttr+'>'+innerXml+'</c>';
     }
@@ -1031,7 +1031,7 @@
   }
 
   function markWorkbookForRecalculationRaw(workbookXml) {
-    const calcRe=/<calcPr\\b([^>]*)\\/>/;
+    const calcRe=/<calcPr\b([^>]*)\/>/;
     const m=calcRe.exec(workbookXml);
 
     function upsert(attrs,name,value) {
@@ -1062,7 +1062,7 @@
       return {stylesXml,sheetXml};
     }
 
-    const countMatch=/<dxfs\\s+count="(\\d+)"/.exec(stylesXml);
+    const countMatch=/<dxfs\s+count="(\d+)"/.exec(stylesXml);
     if (!countMatch || !stylesXml.includes("</dxfs>")) {
       throw new Error("Excelの色設定を確認できません。");
     }
