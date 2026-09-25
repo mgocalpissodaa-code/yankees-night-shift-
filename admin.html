@@ -1064,13 +1064,13 @@
 
     // 1) 勤務欄の中央揃えスタイルを「折り返しあり」にする。
     //    Webから入れる 22:00\n3:00 等を必ず2段表示する。
-    const cellXfsRe=/<cellXfs\\b[^>]*>[\\s\\S]*?<\\/cellXfs>/;
+    const cellXfsRe=new RegExp("<cellXfs\\\\b[^>]*>[\\\\s\\\\S]*?<\\\\/cellXfs>");
     const cellXfsMatch=cellXfsRe.exec(stylesXml);
     if (!cellXfsMatch) throw new Error("Excelのセル書式を確認できません。");
 
     let cellXfs=cellXfsMatch[0]
       .replace(
-        /<alignment horizontal="center" vertical="center"\\/>/g,
+        new RegExp('<alignment horizontal="center" vertical="center"\\\\/>','g'),
         '<alignment horizontal="center" vertical="center" wrapText="1"/>'
       );
 
@@ -1082,21 +1082,22 @@
     // 2) 原本の土日用dxfのうち「勤務欄」に使われるものだけ文字色を黒へ。
     //    背景色は原本の赤系/青系をそのまま残す。
     //    day: 15/16, night: 5/6。日付見出しの赤青は触らない。
-    const dxfsRe=/<dxfs\\b[^>]*>[\\s\\S]*?<\\/dxfs>/;
+    const dxfsRe=new RegExp("<dxfs\\\\b[^>]*>[\\\\s\\\\S]*?<\\\\/dxfs>");
     const dxfsMatch=dxfsRe.exec(stylesXml);
     if (!dxfsMatch) throw new Error("Excelの条件付き書式を確認できません。");
 
     const bodyWeekendDxfIds=new Set([5,6,15,16]);
     let dxfIndex=0;
     const patchedDxfs=dxfsMatch[0].replace(
-      /<dxf\\b[^>]*>[\\s\\S]*?<\\/dxf>/g,
+      new RegExp("<dxf\\\\b[^>]*>[\\\\s\\\\S]*?<\\\\/dxf>","g"),
       dxf=>{
         const index=dxfIndex++;
         if (!bodyWeekendDxfIds.has(index)) return dxf;
 
-        if (/<font>[\\s\\S]*?<\\/font>/.test(dxf)) {
+        const fontRe=new RegExp("<font>[\\\\s\\\\S]*?<\\\\/font>");
+        if (fontRe.test(dxf)) {
           return dxf.replace(
-            /<font>[\\s\\S]*?<\\/font>/,
+            fontRe,
             '<font><color rgb="FF000000"/></font>'
           );
         }
