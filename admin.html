@@ -384,14 +384,10 @@
   }
 
   function setExcelShiftTime(ws,row,col,text) {
-    const cell=ws.getCell(row,col);
-    cell.value=text;
-    cell.alignment={
-      ...(cell.alignment || {}),
-      wrapText:true,
-      horizontal:"center",
-      vertical:"middle"
-    };
+    // 元のExcel書式は触らず、値だけを2段表示で入れる。
+    // 書式を再設定すると原本によってExcelJSの書き出し時に
+    // エラーになることがあるため、既存書式をそのまま使う。
+    ws.getCell(row,col).value=text;
   }
   function defaultPatternForName(name) {
     const r=getRuleByName(name);
