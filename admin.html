@@ -217,7 +217,7 @@
         表示中の年月も原本へ自動で合わせます。
       </div>
       <div class="excel-box">
-        <label for="excelFile">ヤンキース ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（二段・土日黒修正版）</span></label>
+        <label for="excelFile">ヤンキース ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（改行・土日黒確定版）</span></label>
         <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
       </div>
@@ -376,10 +376,10 @@
   }
   function excelPattern(value) {
     const x={
-      "22:00-03:00":"22:00\r\n3:00",
-      "22:00-06:00":"22:00\r\n6:00",
-      "07:00-06:00":"7:00\r\n6:00",
-      "07:00-10:00":"7:00\r\n10:00"
+      "22:00-03:00":"22:00\n3:00",
+      "22:00-06:00":"22:00\n6:00",
+      "07:00-06:00":"7:00\n6:00",
+      "07:00-10:00":"7:00\n10:00"
     };
     return x[value] || "";
   }
@@ -954,7 +954,8 @@
     return String(text)
       .replace(/&/g,"&amp;")
       .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;");
+      .replace(/>/g,"&gt;")
+      .replace(/\r\n|\r|\n/g,"&#10;");
   }
 
   function replaceRawCell(sheetXml,address,innerXml,typeValue=null) {
@@ -1126,9 +1127,10 @@
       patchedCellXfs+
       stylesXml.slice(cellXfsMatch.index+cellXfsMatch[0].length);
 
-    // ★原本では勤務欄の土日色に文字色も含まれている。
-    // 勤務欄用dxfだけ文字色を外し、背景色だけ残す。
-    // 日付見出しの赤・青はそのまま。
+    // ★原本の勤務欄で実際に使われている土日dxfは
+    // 日勤側 9/10、夜勤側 1/2。
+    // 背景色はそのまま、文字色だけ黒に固定する。
+    // 日付見出し側の赤・青は触らない。
     const bodyWeekendDxfIds=new Set([1,2,9,10]);
     const dxfsMatch=new RegExp(
       "<dxfs\\b[^>]*>[\\s\\S]*?<\\/dxfs>"
@@ -1143,9 +1145,17 @@
       dxf=>{
         const index=dxfIndex++;
         if (!bodyWeekendDxfIds.has(index)) return dxf;
+
+        if (new RegExp("<font>[\\s\\S]*?<\\/font>").test(dxf)) {
+          return dxf.replace(
+            new RegExp("<font>[\\s\\S]*?<\\/font>"),
+            '<font><color rgb="FF000000"/></font>'
+          );
+        }
+
         return dxf.replace(
-          new RegExp("<font>[\\s\\S]*?<\\/font>"),
-          ""
+          "<dxf>",
+          '<dxf><font><color rgb="FF000000"/></font>'
         );
       }
     );
