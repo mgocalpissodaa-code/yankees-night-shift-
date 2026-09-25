@@ -156,10 +156,46 @@ begin
 end;
 $func$;
 
+create or replace function public.admin_bulk_cancel_shift_requests(
+  p_staff_id uuid,
+  p_work_dates date[]
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $func$
+declare
+  v_deleted integer;
+begin
+  if coalesce(auth.jwt() ->> 'email', '') <> 'admin@example.com' then
+    raise exception '管理者としてログインしてください。';
+  end if;
+
+  if p_staff_id is null or p_work_dates is null or array_length(p_work_dates, 1) is null then
+    raise exception '職員と日付を選択してください。';
+  end if;
+
+  delete from public.night_availability
+  where staff_id = p_staff_id
+    and work_date = any(p_work_dates);
+
+  get diagnostics v_deleted = row_count;
+
+  return jsonb_build_object(
+    'ok', true,
+    'deleted', v_deleted,
+    'staff_id', p_staff_id
+  );
+end;
+$func$;
+
 revoke all on function public.register_shift_request(uuid, date, text) from public;
 revoke all on function public.get_shift_schedule(date, date) from public;
 revoke all on function public.admin_cancel_shift_request(uuid, date) from public;
+revoke all on function public.admin_bulk_cancel_shift_requests(uuid, date[]) from public;
 
 grant execute on function public.register_shift_request(uuid, date, text) to anon, authenticated;
 grant execute on function public.get_shift_schedule(date, date) to anon, authenticated;
 grant execute on function public.admin_cancel_shift_request(uuid, date) to authenticated;
+grant execute on function public.admin_bulk_cancel_shift_requests(uuid, date[]) to authenticated;
