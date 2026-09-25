@@ -217,7 +217,7 @@
         表示中の年月も原本へ自動で合わせます。
       </div>
       <div class="excel-box">
-        <label for="excelFile">ヤンキース ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（改行・土日黒確定版）</span></label>
+        <label for="excelFile">ヤンキース ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（原本ルール保持版）</span></label>
         <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
       </div>
@@ -1058,101 +1058,48 @@
     );
   }
 
-  function patchScheduleStylesRaw(stylesXml) {
-    // 勤務欄の元書式に折り返しを追加する。
-    // "22:00\n3:00" などの改行をExcel上でも2段表示にする。
-    const wrapStyleIds=new Set([
-      18,19,20,21,22,23,
-      34,35,36,37,38,39,
-      60,61,62,63,64
-    ]);
+  function prepareOfficialTemplateForExport(stylesXml,sheetXml) {
+    // ★原本には元から正しい勤務色の条件付き書式が入っている。
+    // 新しい色ルールを作り直さず、原本のルールを必要最小限だけ補正する。
 
-    const cellXfsMatch=new RegExp(
-      "<cellXfs\\b[^>]*>[\\s\\S]*?<\\/cellXfs>"
-    ).exec(stylesXml);
-    if (!cellXfsMatch) {
-      throw new Error("Excelのセル書式を確認できません。");
-    }
+    // 1) 勤務欄の中央揃えスタイルを「折り返しあり」にする。
+    //    Webから入れる 22:00\n3:00 等を必ず2段表示する。
+    const cellXfsRe=/<cellXfs\\b[^>]*>[\\s\\S]*?<\\/cellXfs>/;
+    const cellXfsMatch=cellXfsRe.exec(stylesXml);
+    if (!cellXfsMatch) throw new Error("Excelのセル書式を確認できません。");
 
-    let xfIndex=0;
-    let patchedCellXfs=cellXfsMatch[0].replace(
-      new RegExp("<xf\\b[^>]*(?:\\/>|>[\\s\\S]*?<\\/xf>)","g"),
-      xf=>{
-        const index=xfIndex++;
-        if (!wrapStyleIds.has(index)) return xf;
-
-        let out=xf;
-
-        if (/\\bapplyAlignment="/.test(out)) {
-          out=out.replace(
-            new RegExp('\\bapplyAlignment="[^"]*"'),
-            'applyAlignment="1"'
-          );
-        } else {
-          out=out.replace(/^<xf\\b/,'<xf applyAlignment="1"');
-        }
-
-        if (new RegExp("<alignment\\b[^>]*\\/>").test(out)) {
-          out=out.replace(
-            new RegExp("<alignment\\b([^>]*)\\/>"),
-            (m,attrs)=>{
-              let a=attrs;
-              if (/\\bwrapText="/.test(a)) {
-                a=a.replace(
-                  new RegExp('\\bwrapText="[^"]*"'),
-                  'wrapText="1"'
-                );
-              } else {
-                a+=' wrapText="1"';
-              }
-              return '<alignment'+a+'/>';
-            }
-          );
-        } else if (out.includes("</xf>")) {
-          out=out.replace(
-            "</xf>",
-            '<alignment horizontal="center" vertical="center" wrapText="1"/></xf>'
-          );
-        } else if (out.endsWith("/>")) {
-          out=out.slice(0,-2)+
-            '><alignment horizontal="center" vertical="center" wrapText="1"/></xf>';
-        }
-
-        return out;
-      }
-    );
+    let cellXfs=cellXfsMatch[0]
+      .replace(
+        /<alignment horizontal="center" vertical="center"\\/>/g,
+        '<alignment horizontal="center" vertical="center" wrapText="1"/>'
+      );
 
     stylesXml=
       stylesXml.slice(0,cellXfsMatch.index)+
-      patchedCellXfs+
+      cellXfs+
       stylesXml.slice(cellXfsMatch.index+cellXfsMatch[0].length);
 
-    // ★原本の勤務欄で実際に使われている土日dxfは
-    // 日勤側 9/10、夜勤側 1/2。
-    // 背景色はそのまま、文字色だけ黒に固定する。
-    // 日付見出し側の赤・青は触らない。
-    const bodyWeekendDxfIds=new Set([1,2,9,10]);
-    const dxfsMatch=new RegExp(
-      "<dxfs\\b[^>]*>[\\s\\S]*?<\\/dxfs>"
-    ).exec(stylesXml);
-    if (!dxfsMatch) {
-      throw new Error("Excelの条件付き書式を確認できません。");
-    }
+    // 2) 原本の土日用dxfのうち「勤務欄」に使われるものだけ文字色を黒へ。
+    //    背景色は原本の赤系/青系をそのまま残す。
+    //    day: 15/16, night: 5/6。日付見出しの赤青は触らない。
+    const dxfsRe=/<dxfs\\b[^>]*>[\\s\\S]*?<\\/dxfs>/;
+    const dxfsMatch=dxfsRe.exec(stylesXml);
+    if (!dxfsMatch) throw new Error("Excelの条件付き書式を確認できません。");
 
+    const bodyWeekendDxfIds=new Set([5,6,15,16]);
     let dxfIndex=0;
     const patchedDxfs=dxfsMatch[0].replace(
-      new RegExp("<dxf\\b[^>]*>[\\s\\S]*?<\\/dxf>","g"),
+      /<dxf\\b[^>]*>[\\s\\S]*?<\\/dxf>/g,
       dxf=>{
         const index=dxfIndex++;
         if (!bodyWeekendDxfIds.has(index)) return dxf;
 
-        if (new RegExp("<font>[\\s\\S]*?<\\/font>").test(dxf)) {
+        if (/<font>[\\s\\S]*?<\\/font>/.test(dxf)) {
           return dxf.replace(
-            new RegExp("<font>[\\s\\S]*?<\\/font>"),
+            /<font>[\\s\\S]*?<\\/font>/,
             '<font><color rgb="FF000000"/></font>'
           );
         }
-
         return dxf.replace(
           "<dxf>",
           '<dxf><font><color rgb="FF000000"/></font>'
@@ -1165,124 +1112,65 @@
       patchedDxfs+
       stylesXml.slice(dxfsMatch.index+dxfsMatch[0].length);
 
-    return stylesXml;
-  }
-
-  function addSafeShiftColorRules(stylesXml,sheetXml) {
-    if (sheetXml.includes('SEARCH("有休",B6)')) {
-      return {stylesXml,sheetXml};
-    }
-
-    const countMatch=/<dxfs\s+count="(\d+)"/.exec(stylesXml);
-    if (!countMatch || !stylesXml.includes("</dxfs>")) {
-      throw new Error("Excelの色設定を確認できません。");
-    }
-
-    const base=Number(countMatch[1]);
-    // ★原本に元から入っている条件付き書式と同じ
-    // 「fgColor indexed=64 + bgColor RGB」の形式で追加する。
-    // 逆にするとExcelで黒塗りになることがある。
-    const newDxfs=[
-      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor indexed="64"/><bgColor rgb="FFFFC000"/></patternFill></fill></dxf>',
-      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor indexed="64"/><bgColor rgb="FFD9E1F2"/></patternFill></fill></dxf>',
-      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor indexed="64"/><bgColor rgb="FFD9B3FF"/></patternFill></fill></dxf>',
-      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor indexed="64"/><bgColor rgb="FFFF99CC"/></patternFill></fill></dxf>',
-      '<dxf><font><color rgb="FF000000"/></font></dxf>'
-    ];
-
-    stylesXml=stylesXml.replace(
-      countMatch[0],
-      countMatch[0].replace(
-        'count="'+base+'"',
-        'count="'+(base+newDxfs.length)+'"'
+    // 3) 原本の自動色ルールを現在の運用に合わせる。
+    //    「有休」ではなく「有給」だけをピンク対象にする。
+    sheetXml=sheetXml
+      .replace(
+        'ISNUMBER(SEARCH("有休",B6&amp;""))',
+        'ISNUMBER(SEARCH("有給",B6&amp;""))'
       )
-    );
-    stylesXml=stylesXml.replace(
-      "</dxfs>",
-      newDxfs.join("")+"</dxfs>"
-    );
+      .replace(
+        'ISNUMBER(SEARCH("有休",B14&amp;""))',
+        'ISNUMBER(SEARCH("有給",B14&amp;""))'
+      );
 
-    function rule(range,formula,dxfId,priority,stop=true) {
-      return '<conditionalFormatting sqref="'+range+'">'+
-        '<cfRule type="expression" dxfId="'+dxfId+'" priority="'+priority+'"'+
-        (stop ? ' stopIfTrue="1"' : '')+'>'+
-        '<formula>'+formula+'</formula>'+
-        '</cfRule></conditionalFormatting>';
-    }
-
-    const rules=[
-      rule(
-        "B6:AF11",
-        'OR(ISNUMBER(SEARCH("有休",B6)),ISNUMBER(SEARCH("有給",B6)))',
-        base+3,1,true
-      ),
-      rule(
-        "B14:AF17",
-        'OR(ISNUMBER(SEARCH("有休",B14)),ISNUMBER(SEARCH("有給",B14)))',
-        base+3,2,true
-      ),
-      rule(
-        "B11:AF11",
-        'AND(ISNUMBER(SEARCH(":",B11)),LEFT(B11,4)="7:00",ISNUMBER(SEARCH("6:00",B11)))',
-        base+2,3,true
-      ),
-      rule(
-        "B14:AF17",
-        'AND(ISNUMBER(SEARCH(":",B14)),LEFT(B14,4)="7:00",ISNUMBER(SEARCH("6:00",B14)))',
-        base+2,4,true
-      ),
-      rule(
-        "B11:AF11",
-        'AND(ISNUMBER(SEARCH(":",B11)),LEFT(B11,5)="22:00")',
-        base+1,5,true
-      ),
-      rule(
-        "B14:AF17",
-        'ISNUMBER(SEARCH(":",B14))',
-        base+1,6,true
-      ),
-      rule(
-        "B6:AF10",
-        'ISNUMBER(SEARCH(":",B6))',
-        base,7,true
-      ),
-      rule(
-        "B11:AF11",
-        'ISNUMBER(SEARCH(":",B11))',
-        base,8,true
-      ),
-      rule(
-        "B6:AF11",
-        'ISNUMBER(SEARCH("公休",B6))',
-        base+4,9,false
-      ),
-      rule(
-        "B14:AF17",
-        'ISNUMBER(SEARCH("公休",B14))',
-        base+4,10,false
+    // 7:00～翌6:00は「翌」という文字を使わなくても紫になるよう判定。
+    sheetXml=sheetXml
+      .replace(
+        'AND(B6&lt;&gt;"",ISNUMBER(SEARCH("翌",B6)))',
+        'AND(B6&lt;&gt;"",LEFT(B6,4)="7:00",ISNUMBER(SEARCH("6:00",B6)))'
       )
-    ].join("");
+      .replace(
+        'AND(B14&lt;&gt;"",ISNUMBER(SEARCH("翌",B14)))',
+        'AND(B14&lt;&gt;"",LEFT(B14,4)="7:00",ISNUMBER(SEARCH("6:00",B14)))'
+      );
 
-    const anchors=[
-      "<dataValidations",
-      "<hyperlinks",
-      "<printOptions",
-      "<pageMargins",
-      "<pageSetup",
-      "<headerFooter",
-      "<extLst"
-    ]
-      .map(tag=>sheetXml.indexOf(tag))
-      .filter(pos=>pos>=0);
+    // 日勤色は「-」の有無ではなく時間(:)で判定。
+    // 22時夜勤・7時～翌6時は別色ルールを優先する。
+    sheetXml=sheetXml
+      .replace(
+        'AND(B6&lt;&gt;"",ISNUMBER(SEARCH("-",B6)),ISERROR(SEARCH("22:00",B6)),ISERROR(SEARCH("翌",B6)))',
+        'AND(B6&lt;&gt;"",ISNUMBER(SEARCH(":",B6)),ISERROR(SEARCH("22:00",B6)),NOT(AND(LEFT(B6,4)="7:00",ISNUMBER(SEARCH("6:00",B6)))))'
+      )
+      .replace(
+        'AND(B14&lt;&gt;"",ISNUMBER(SEARCH("-",B14)),ISERROR(SEARCH("22:00",B14)),ISERROR(SEARCH("翌",B14)))',
+        'AND(B14&lt;&gt;"",ISNUMBER(SEARCH(":",B14)),ISERROR(SEARCH("22:00",B14)),NOT(AND(LEFT(B14,4)="7:00",ISNUMBER(SEARCH("6:00",B14)))))'
+      );
 
-    const insertAt=anchors.length
-      ? Math.min(...anchors)
-      : sheetXml.lastIndexOf("</worksheet>");
+    // 4) 祝日も日曜と同じ背景にする。
+    //    原本にあるdxfを再利用するので、新しい色定義は作らない。
+    if (!sheetXml.includes("COUNTIF(祝日!$A$2:$A$36")) {
+      const holidayRules=[
+        '<conditionalFormatting sqref="B4:AF4"><cfRule type="expression" dxfId="19" priority="101"><formula>AND(B$4&lt;&gt;"",COUNTIF(祝日!$A$2:$A$36,DATE($A$3,$B$3,COLUMN()-1))&gt;0)</formula></cfRule></conditionalFormatting>',
+        '<conditionalFormatting sqref="B5:AF11"><cfRule type="expression" dxfId="15" priority="102"><formula>AND(B$4&lt;&gt;"",COUNTIF(祝日!$A$2:$A$36,DATE($A$3,$B$3,COLUMN()-1))&gt;0)</formula></cfRule></conditionalFormatting>',
+        '<conditionalFormatting sqref="B12:AF12"><cfRule type="expression" dxfId="8" priority="103"><formula>AND(B$4&lt;&gt;"",COUNTIF(祝日!$A$2:$A$36,DATE($A$3,$B$3,COLUMN()-1))&gt;0)</formula></cfRule></conditionalFormatting>',
+        '<conditionalFormatting sqref="B13:AF19"><cfRule type="expression" dxfId="5" priority="104"><formula>AND(B$4&lt;&gt;"",COUNTIF(祝日!$A$2:$A$36,DATE($A$3,$B$3,COLUMN()-1))&gt;0)</formula></cfRule></conditionalFormatting>'
+      ].join("");
 
-    sheetXml=
-      sheetXml.slice(0,insertAt)+
-      rules+
-      sheetXml.slice(insertAt);
+      const anchors=[
+        "<dataValidations","<hyperlinks","<printOptions",
+        "<pageMargins","<pageSetup","<headerFooter","<extLst"
+      ].map(tag=>sheetXml.indexOf(tag)).filter(pos=>pos>=0);
+
+      const insertAt=anchors.length
+        ? Math.min(...anchors)
+        : sheetXml.lastIndexOf("</worksheet>");
+
+      sheetXml=
+        sheetXml.slice(0,insertAt)+
+        holidayRules+
+        sheetXml.slice(insertAt);
+    }
 
     return {stylesXml,sheetXml};
   }
@@ -1429,11 +1317,9 @@
         }
       }
 
-      stylesXml=patchScheduleStylesRaw(stylesXml);
-
-      const colored=addSafeShiftColorRules(stylesXml,sheetXml);
-      stylesXml=colored.stylesXml;
-      sheetXml=colored.sheetXml;
+      const prepared=prepareOfficialTemplateForExport(stylesXml,sheetXml);
+      stylesXml=prepared.stylesXml;
+      sheetXml=prepared.sheetXml;
 
       workbookXml=markWorkbookForRecalculationRaw(workbookXml);
 
