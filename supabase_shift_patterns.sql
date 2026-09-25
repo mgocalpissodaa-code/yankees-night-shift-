@@ -65,8 +65,8 @@ begin
     end if;
 
   elsif v_name = '鎌田フサ子' then
-    if p_shift_pattern not in ('22:00-06:00', '07:00-06:00', '07:00-10:00', 'PAID') then
-      raise exception '鎌田さんの勤務時間または有給を選び直してください。';
+    if p_shift_pattern not in ('22:00-06:00', '07:00-06:00', '07:00-10:00', 'PUBLIC_REST', 'PAID') then
+      raise exception '鎌田さんの勤務時間・公休・有給を選び直してください。';
     end if;
 
   else
