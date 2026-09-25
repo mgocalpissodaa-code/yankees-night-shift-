@@ -50,23 +50,23 @@ begin
   end if;
 
   if v_name in ('藤井亮輔', '桑原莉子', '古垣竜也') then
-    if p_shift_pattern <> 'OFF' then
-      raise exception 'この職員は休み希望のみ登録できます。';
+    if p_shift_pattern not in ('OFF', 'PAID') then
+      raise exception 'この職員は休み希望または有給を登録してください。';
     end if;
 
   elsif v_name = '内藤昌子' then
-    if p_shift_pattern <> '22:00-03:00' then
-      raise exception '内藤さんは22:00〜3:00で登録してください。';
+    if p_shift_pattern not in ('22:00-03:00', 'PAID') then
+      raise exception '内藤さんは22:00〜翌3:00または有給で登録してください。';
     end if;
 
   elsif v_name in ('前川良司', '鹿島佑斗') then
-    if p_shift_pattern <> '22:00-06:00' then
-      raise exception 'この職員は22:00〜6:00で登録してください。';
+    if p_shift_pattern not in ('22:00-06:00', 'PAID') then
+      raise exception 'この職員は22:00〜翌6:00または有給で登録してください。';
     end if;
 
   elsif v_name = '鎌田フサ子' then
-    if p_shift_pattern not in ('22:00-06:00', '07:00-06:00', '07:00-10:00') then
-      raise exception '鎌田さんの勤務時間を選び直してください。';
+    if p_shift_pattern not in ('22:00-06:00', '07:00-06:00', '07:00-10:00', 'PAID') then
+      raise exception '鎌田さんの勤務時間または有給を選び直してください。';
     end if;
 
   else
