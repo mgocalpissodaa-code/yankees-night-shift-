@@ -150,7 +150,7 @@
     <div class="card">
       <h2>職員管理</h2>
       <div class="sub">
-        ヤンキースの入力対象は、日勤：藤井・桑原・古垣、夜勤：内藤・前川・鹿島・鎌田です。安庭・宮路は入力対象外です。
+        職員の追加、名前変更、削除ができます。
       </div>
       <div class="form-grid" style="margin-top:12px;">
         <div>
@@ -316,7 +316,33 @@
   function normalizeStaffName(name) {
     return String(name || "").replace(/[\s　]+/g,"").replace(/\([^)]*\)/g,"").trim();
   }
-  function getRuleByName(name) { return STAFF_RULES[normalizeStaffName(name)] || null; }
+  const STAFF_NAME_ALIASES = {
+    "藤井":"藤井亮輔",
+    "桑原":"桑原莉子",
+    "古垣":"古垣竜也",
+    "内藤":"内藤昌子",
+    "前川":"前川良司",
+    "鹿島":"鹿島佑斗",
+    "鎌田":"鎌田フサ子"
+  };
+  const STAFF_DISPLAY_NAMES = {
+    "藤井亮輔":"藤井",
+    "桑原莉子":"桑原",
+    "古垣竜也":"古垣",
+    "内藤昌子":"内藤",
+    "前川良司":"前川",
+    "鹿島佑斗":"鹿島",
+    "鎌田フサ子":"鎌田"
+  };
+  function canonicalStaffName(name) {
+    const key=normalizeStaffName(name);
+    return STAFF_NAME_ALIASES[key] || key;
+  }
+  function displayStaffName(name) {
+    const key=canonicalStaffName(name);
+    return STAFF_DISPLAY_NAMES[key] || name;
+  }
+  function getRuleByName(name) { return STAFF_RULES[canonicalStaffName(name)] || null; }
   function dateKey(year,month,day) {
     return year + "-" + String(month+1).padStart(2,"0") + "-" + String(day).padStart(2,"0");
   }
@@ -374,8 +400,8 @@
     staffSelect.innerHTML='<option value="">職員を選択してください</option>';
     editStaff.innerHTML="";
     staffs.forEach(staff=>{
-      const a=document.createElement("option"); a.value=staff.id; a.textContent=staff.name; staffSelect.appendChild(a);
-      const b=document.createElement("option"); b.value=staff.id; b.textContent=staff.name; editStaff.appendChild(b);
+      const a=document.createElement("option"); a.value=staff.id; a.textContent=displayStaffName(staff.name); staffSelect.appendChild(a);
+      const b=document.createElement("option"); b.value=staff.id; b.textContent=displayStaffName(staff.name); editStaff.appendChild(b);
     });
     updateAdminPattern();
   }
@@ -392,7 +418,7 @@
     managedStaffs.forEach(staff=>{
       const row=document.createElement("div"); row.className="staff-manage-row";
       const info=document.createElement("div"); info.className="staff-manage-info";
-      const name=document.createElement("div"); name.className="staff-manage-name"; name.textContent=staff.name;
+      const name=document.createElement("div"); name.className="staff-manage-name"; name.textContent=displayStaffName(staff.name);
       const status=document.createElement("div"); status.className="staff-manage-status";
       const rule=getRuleByName(staff.name);
       status.textContent=rule ? (rule.mode==="off" ? "日勤・休み希望" : "勤務可能日") : "入力対象外";
@@ -455,7 +481,7 @@
     countSummary.innerHTML="";
     staffs.forEach(staff=>{
       const item=document.createElement("div"); item.className="count-summary-item";
-      const n=document.createElement("div"); n.className="count-summary-name"; n.textContent=staff.name;
+      const n=document.createElement("div"); n.className="count-summary-name"; n.textContent=displayStaffName(staff.name);
       const d=document.createElement("div"); d.className="count-summary-days"; d.textContent=(counts[staff.id]||0)+"日";
       item.appendChild(n); item.appendChild(d); countSummary.appendChild(item);
     });
@@ -488,7 +514,7 @@
 
       assigned.forEach(person=>{
         const tag=document.createElement("button"); tag.type="button"; tag.className="staff-tag";
-        tag.textContent=person.staffName+" "+patternLabel(person.shiftPattern);
+        tag.textContent=displayStaffName(person.staffName)+" "+patternLabel(person.shiftPattern);
         tag.addEventListener("click",ev=>{ev.stopPropagation();openEdit(key,person);});
         el.appendChild(tag);
       });
@@ -539,7 +565,7 @@
 
   function openEdit(workDate,person) {
     selectedRegistration={workDate,staffId:person.staffId,staffName:person.staffName,shiftPattern:person.shiftPattern};
-    editOriginal.textContent=workDate+"　"+person.staffName+"　"+patternLabel(person.shiftPattern);
+    editOriginal.textContent=workDate+"　"+displayStaffName(person.staffName)+"　"+patternLabel(person.shiftPattern);
     editStaff.value=person.staffId;
     editDate.value=workDate;
     editDate.min=todayKey();
@@ -698,8 +724,8 @@
     return null;
   }
   function findRegistrationByNameDate(name,key) {
-    const norm=normalizeStaffName(name);
-    return (schedule[key] || []).find(p=>normalizeStaffName(p.staffName)===norm) || null;
+    const norm=canonicalStaffName(name);
+    return (schedule[key] || []).find(p=>canonicalStaffName(p.staffName)===norm) || null;
   }
 
   excelExportBtn.addEventListener("click",async()=>{
