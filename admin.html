@@ -253,6 +253,14 @@
         </div>
         <button id="addStaffBtn" class="success">職員を追加</button>
       </div>
+      <div style="margin-top:10px;">
+        <button id="syncYankeesStaffBtn" class="secondary full" type="button">
+          シフト表の夜勤職員4名を反映
+        </button>
+        <div class="sub" style="margin-top:6px;">
+          内藤 昌子・前川 良司・鹿島 佑斗・鎌田 フサ子に揃えます。
+        </div>
+      </div>
       <div id="staffManageList" class="staff-manage-list"></div>
     </div>
 
@@ -354,6 +362,7 @@
   const newStaffName = document.getElementById("newStaffName");
   const addStaffBtn = document.getElementById("addStaffBtn");
   const staffManageList = document.getElementById("staffManageList");
+  const syncYankeesStaffBtn = document.getElementById("syncYankeesStaffBtn");
   const countSummaryTitle = document.getElementById("countSummaryTitle");
   const countSummary = document.getElementById("countSummary");
 
@@ -824,6 +833,96 @@
 
   newStaffName.addEventListener("keydown", function(event) {
     if (event.key === "Enter") addStaffBtn.click();
+  });
+
+  function normalizeStaffName(name) {
+    return String(name || "")
+      .replace(/[\s　]+/g, "")
+      .replace(/\([^)]*\)/g, "")
+      .trim();
+  }
+
+  syncYankeesStaffBtn.addEventListener("click", async function() {
+    const targets = [
+      { name: "内藤 昌子", aliases: ["内藤", "内藤昌子"] },
+      { name: "前川 良司", aliases: ["前川", "前川良司"] },
+      { name: "鹿島 佑斗", aliases: ["鹿島", "鹿島佑斗"] },
+      { name: "鎌田 フサ子", aliases: ["鎌田", "鎌田フサ子"] }
+    ];
+
+    const ok = confirm(
+      "ヤンキースのシフト表に載っている夜勤職員4名に名前を揃えますか？"
+    );
+    if (!ok) return;
+
+    syncYankeesStaffBtn.disabled = true;
+    syncYankeesStaffBtn.textContent = "反映中...";
+
+    const current = await client.rpc("admin_list_staffs");
+    if (current.error) {
+      syncYankeesStaffBtn.disabled = false;
+      syncYankeesStaffBtn.textContent = "シフト表の夜勤職員4名を反映";
+      showMessage("職員一覧を取得できませんでした：" + current.error.message, "error");
+      return;
+    }
+
+    let changed = 0;
+    let failed = 0;
+    let rows = current.data || [];
+
+    for (const target of targets) {
+      const targetNorm = normalizeStaffName(target.name);
+      const aliases = target.aliases.map(normalizeStaffName);
+
+      let exact = rows.find(function(staff) {
+        return normalizeStaffName(staff.name) === targetNorm;
+      });
+
+      if (exact) continue;
+
+      let alias = rows.find(function(staff) {
+        const n = normalizeStaffName(staff.name);
+        return aliases.includes(n);
+      });
+
+      if (alias) {
+        const renameResult = await client.rpc("admin_rename_staff", {
+          p_staff_id: alias.id,
+          p_name: target.name
+        });
+
+        if (renameResult.error) {
+          failed++;
+        } else {
+          alias.name = target.name;
+          changed++;
+        }
+      } else {
+        const addResult = await client.rpc("admin_add_staff", {
+          p_name: target.name
+        });
+
+        if (addResult.error) {
+          failed++;
+        } else {
+          changed++;
+          const refreshed = await client.rpc("admin_list_staffs");
+          if (!refreshed.error) rows = refreshed.data || rows;
+        }
+      }
+    }
+
+    syncYankeesStaffBtn.disabled = false;
+    syncYankeesStaffBtn.textContent = "シフト表の夜勤職員4名を反映";
+
+    await refreshStaffManagement();
+
+    showMessage(
+      failed === 0
+        ? "夜勤職員4名をシフト表の名前に揃えました。"
+        : "名前を反映しましたが、" + failed + "件は反映できませんでした。",
+      failed === 0 ? "ok" : "error"
+    );
   });
 
   staffSelect.addEventListener("change", function() {
