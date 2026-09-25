@@ -115,9 +115,9 @@
   </div>
 
   <div id="patternCard" class="card hidden">
-    <label for="patternSelect">勤務時間</label>
+    <label id="patternLabel" for="patternSelect">希望内容</label>
     <select id="patternSelect"></select>
-    <div class="sub" style="margin-top:7px;">選んだ勤務時間で、複数の日付をまとめて登録できます。</div>
+    <div id="patternHelp" class="sub" style="margin-top:7px;">希望内容を選んでください。</div>
   </div>
 
   <div class="card">
@@ -174,6 +174,8 @@
   const staffSelect = document.getElementById("staffSelect");
   const patternCard = document.getElementById("patternCard");
   const patternSelect = document.getElementById("patternSelect");
+  const patternLabelEl = document.getElementById("patternLabel");
+  const patternHelp = document.getElementById("patternHelp");
   const modeInfo = document.getElementById("modeInfo");
   const calendar = document.getElementById("calendar");
   const monthTitle = document.getElementById("monthTitle");
@@ -337,6 +339,24 @@
     renderCalendar();
   }
 
+  function updateRegisterButtonText() {
+    const rule = selectedRule();
+    const pattern = chosenPattern();
+
+    if (!rule) {
+      registerBtn.textContent = "選択した内容を登録";
+      return;
+    }
+
+    if (pattern === "PAID") {
+      registerBtn.textContent = "選択した日を有給で登録";
+    } else if (rule.mode === "off") {
+      registerBtn.textContent = "選択した日を休み希望で登録";
+    } else {
+      registerBtn.textContent = "選択した日に働けます";
+    }
+  }
+
   function updateStaffMode() {
     const staff = selectedStaff();
     const rule = selectedRule();
@@ -349,30 +369,31 @@
       return;
     }
 
+    patternSelect.innerHTML = "";
+    rule.options.forEach(opt => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      patternSelect.appendChild(option);
+    });
+
     if (rule.mode === "off") {
-      modeInfo.textContent = "休み希望の日を選んでください。複数日まとめて登録できます。";
-      patternCard.classList.add("hidden");
-      registerBtn.textContent = "選択した日を休み希望で登録";
+      modeInfo.textContent = "「休み希望」か「有給」を選んでから、日付を選択してください。";
+      patternLabelEl.textContent = "希望内容";
+      patternHelp.textContent = "「休み希望」または「有給」を選べます。";
     } else {
       modeInfo.textContent =
         rule.options.length === 1
           ? "働ける日を選んでください。勤務時間：" + rule.options[0].label
-          : "勤務時間を選んでから、働ける日を選んでください。";
-
-      patternSelect.innerHTML = "";
-      rule.options.forEach(opt => {
-        const option = document.createElement("option");
-        option.value = opt.value;
-        option.textContent = opt.label;
-        patternSelect.appendChild(option);
-      });
-
-      if (rule.options.length > 1) patternCard.classList.remove("hidden");
-      else patternCard.classList.add("hidden");
-
-      registerBtn.textContent = "選択した日に働けます";
+          : "勤務時間または「有給」を選んでから、日付を選択してください。";
+      patternLabelEl.textContent = "希望内容 / 勤務時間";
+      patternHelp.textContent = "勤務時間または「有給」を選べます。";
     }
 
+    if (rule.options.length > 1) patternCard.classList.remove("hidden");
+    else patternCard.classList.add("hidden");
+
+    updateRegisterButtonText();
     renderCalendar();
   }
 
@@ -480,7 +501,10 @@
   }
 
   staffSelect.addEventListener("change", updateStaffMode);
-  patternSelect.addEventListener("change", updateActionArea);
+  patternSelect.addEventListener("change", () => {
+    updateRegisterButtonText();
+    updateActionArea();
+  });
 
   registerBtn.addEventListener("click", async () => {
     const staff = selectedStaff();
