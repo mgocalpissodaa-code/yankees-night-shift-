@@ -212,12 +212,12 @@
     <div class="card">
       <h2>Excelへ反映</h2>
       <div class="sub">
-        「ヤンキース_★原本_修正版.xlsx」を使います。
-        Web側はExcelの書式には触らず、希望内容と年月の値だけを反映します。
+        最初に送ってもらった未加工の「★原本.xlsx」を使います。
+        Web側はExcelの書式・色・条件付き書式には一切触らず、希望内容と年月の値だけを反映します。
         日勤3名は休み希望だけ、夜勤4名は希望入力済みの職員だけ勤務可能日を反映します。
       </div>
       <div class="excel-box">
-        <label for="excelFile">ヤンキース_★原本_修正版.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（値だけ反映版）</span></label>
+        <label for="excelFile">未加工の ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（書式変更なし）</span></label>
         <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
       </div>
@@ -1211,6 +1211,15 @@
     let excelStage="ファイル読込";
 
     try {
+      const badGeneratedFile=
+        /ヤンキース_★原本_(?:修正版|正式版)/.test(file.name || "");
+
+      if (badGeneratedFile) {
+        throw new Error(
+          "以前こちらで作った修正版・正式版は使わず、未加工の「★原本.xlsx」を選んでください。"
+        );
+      }
+
       const arrayBuffer=await file.arrayBuffer();
       const zip=await JSZip.loadAsync(arrayBuffer);
 
@@ -1221,8 +1230,6 @@
       verifyOfficialTemplate(sheetDoc);
 
       let sheetXml=official.sheetXml;
-      let stylesXml=official.stylesXml;
-      let workbookXml=official.workbookXml;
 
       const y=currentDate.getFullYear();
       const m=currentDate.getMonth();
@@ -1326,8 +1333,8 @@
         }
       }
 
-      // 修正版原本に入っている書式・条件付き書式・数式は一切変更しない。
-      // Webアプリはシフトシートのセル値だけを書き換える。
+      // Excelの書式・色・条件付き書式・数式は一切変更しない。
+      // 未加工の原本のシフトシートで、セルの値だけを書き換える。
       zip.file(official.sheetPath,sheetXml);
 
       excelStage="Excel保存";
@@ -1350,7 +1357,7 @@
       a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
 
-      showMessage("修正版原本に希望内容だけを反映してExcelを作成しました。");
+      showMessage("未加工の原本に、希望内容の値だけを反映してExcelを作成しました。");
     } catch(error) {
       console.error("Excel export failed at",excelStage,error);
       showMessage(
