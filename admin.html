@@ -880,8 +880,19 @@
     const file=zip.file("xl/sharedStrings.xml");
     if (!file) return [];
     const doc=parseXml(await file.async("string"),"sharedStrings.xml");
+
     return Array.from(doc.getElementsByTagName("si")).map(si=>
       Array.from(si.getElementsByTagName("t"))
+        .filter(t=>{
+          // Excelの「ふりがな(rPh)」は表示文字ではないので除外する。
+          // ★原本では一部の職員名に隠しふりがなが入っている。
+          let p=t.parentNode;
+          while (p && p!==si) {
+            if (p.localName==="rPh") return false;
+            p=p.parentNode;
+          }
+          return true;
+        })
         .map(t=>t.textContent || "")
         .join("")
     );
@@ -967,7 +978,11 @@
 
     for (let row=start;row<=end;row++) {
       const cell=findXmlCell(sheetDoc,"A"+row);
-      if (normalizeStaffName(xmlCellText(cell,sharedStrings))===norm) {
+      const actual=normalizeStaffName(xmlCellText(cell,sharedStrings));
+
+      // 通常は完全一致。古いExcel由来のふりがな情報が文字列側に
+      // 残っていても、氏名本体が先頭一致すれば同じ職員として扱う。
+      if (actual===norm || actual.startsWith(norm)) {
         return row;
       }
     }
