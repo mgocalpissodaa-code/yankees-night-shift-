@@ -943,7 +943,11 @@
   }
 
   function escapeRegex(text) {
-    return String(text).replace(/[-/\\^$*+?.()|[\]{}]/g,"\\$&");
+    const specials="\\^$.*+?()[]{}|/";
+    return String(text)
+      .split("")
+      .map(ch=>specials.includes(ch) ? "\\"+ch : ch)
+      .join("");
   }
 
   function escapeXmlText(text) {
