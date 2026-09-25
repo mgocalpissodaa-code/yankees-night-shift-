@@ -824,10 +824,6 @@
     return doc;
   }
 
-  function serializeXml(doc) {
-    return new XMLSerializer().serializeToString(doc);
-  }
-
   function normalizeWorkbookTarget(target) {
     let p=String(target || "").replace(/\\/g,"/");
     if (p.startsWith("/")) p=p.slice(1);
@@ -840,12 +836,16 @@
   async function getOfficialShiftSheet(zip) {
     const workbookFile=zip.file("xl/workbook.xml");
     const relsFile=zip.file("xl/_rels/workbook.xml.rels");
-    if (!workbookFile || !relsFile) {
+    const stylesFile=zip.file("xl/styles.xml");
+    if (!workbookFile || !relsFile || !stylesFile) {
       throw new Error("Excelの構成を確認できません。");
     }
 
-    const workbookDoc=parseXml(await workbookFile.async("string"),"workbook.xml");
-    const relsDoc=parseXml(await relsFile.async("string"),"workbook.xml.rels");
+    const workbookXml=await workbookFile.async("string");
+    const relsXml=await relsFile.async("string");
+    const stylesXml=await stylesFile.async("string");
+    const workbookDoc=parseXml(workbookXml,"workbook.xml");
+    const relsDoc=parseXml(relsXml,"workbook.xml.rels");
     const sheets=Array.from(workbookDoc.getElementsByTagName("sheet"));
 
     if (!sheets.some(s=>s.getAttribute("name")==="祝日")) {
@@ -857,28 +857,30 @@
 
     const rid=
       main.getAttribute("r:id") ||
-      main.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id");
+      main.getAttributeNS(
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        "id"
+      );
 
     const rel=Array.from(relsDoc.getElementsByTagName("Relationship"))
       .find(r=>r.getAttribute("Id")===rid);
-
     if (!rel) throw new Error("シフトシートの参照先が見つかりません。");
 
-    const path=normalizeWorkbookTarget(rel.getAttribute("Target"));
-    const sheetFile=zip.file(path);
+    const sheetPath=normalizeWorkbookTarget(rel.getAttribute("Target"));
+    const sheetFile=zip.file(sheetPath);
     if (!sheetFile) throw new Error("シフトシート本体が見つかりません。");
 
-    const stylesFile=zip.file("xl/styles.xml");
-    if (!stylesFile) throw new Error("Excelの書式情報が見つかりません。");
+    const sheetXml=await sheetFile.async("string");
 
     return {
-      workbookDoc,
       workbookPath:"xl/workbook.xml",
+      workbookXml,
       stylesPath:"xl/styles.xml",
-      stylesDoc:parseXml(await stylesFile.async("string"),"styles.xml"),
+      stylesXml,
       sheetName:main.getAttribute("name"),
-      sheetPath:path,
-      sheetDoc:parseXml(await sheetFile.async("string"),"シフトシート")
+      sheetPath,
+      sheetXml,
+      sheetDoc:parseXml(sheetXml,"シフトシート")
     };
   }
 
@@ -890,8 +892,6 @@
     return Array.from(doc.getElementsByTagName("si")).map(si=>
       Array.from(si.getElementsByTagName("t"))
         .filter(t=>{
-          // Excelの「ふりがな(rPh)」は表示文字ではないので除外する。
-          // ★原本では一部の職員名に隠しふりがなが入っている。
           let p=t.parentNode;
           while (p && p!==si) {
             if (p.localName==="rPh") return false;
@@ -932,247 +932,76 @@
       .find(c=>c.getAttribute("r")===address) || null;
   }
 
-  function getOfficialCell(sheetDoc,address) {
+  function assertWritableShiftCell(sheetDoc,address) {
     const cell=findXmlCell(sheetDoc,address);
     if (!cell) {
       throw new Error("原本のセル "+address+" が見つかりません。");
     }
-    return cell;
-  }
-
-  function assertWritableShiftCell(sheetDoc,address) {
-    const cell=getOfficialCell(sheetDoc,address);
     if (cell.getElementsByTagName("f").length) {
       throw new Error("原本の勤務欄 "+address+" に数式があるため、書き換えを中止しました。");
     }
-    return cell;
   }
 
-  function clearXmlCellValue(cell) {
-    while (cell.firstChild) cell.removeChild(cell.firstChild);
-    cell.removeAttribute("t");
+  function escapeRegex(text) {
+    return String(text).replace(/[-/\\^$*+?.()|[\]{}]/g,"\\$&");
   }
 
-  function setXmlNumber(sheetDoc,address,value) {
-    const cell=getOfficialCell(sheetDoc,address);
-    if (cell.getElementsByTagName("f").length) {
-      throw new Error(address+" は数式セルのため年月を設定できません。");
-    }
-    clearXmlCellValue(cell);
-    const ns=sheetDoc.documentElement.namespaceURI;
-    const v=sheetDoc.createElementNS(ns,"v");
-    v.textContent=String(value);
-    cell.appendChild(v);
+  function escapeXmlText(text) {
+    return String(text)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;");
   }
 
-  function ensureWrappedCellStyle(stylesDoc,cell,cache) {
-    const current=Number(cell.getAttribute("s") || "0");
-    if (cache.has(current)) {
-      cell.setAttribute("s",String(cache.get(current)));
-      return;
+  function replaceRawCell(sheetXml,address,innerXml,typeValue=null) {
+    const addr=escapeRegex(address);
+    const selfClosing=new RegExp(
+      '<c\\b(?=[^>]*\\br="'+addr+'")([^>]*)\\/>'
+    );
+    let match=selfClosing.exec(sheetXml);
+
+    function build(attrs) {
+      attrs=attrs.replace(/\\s+t="[^"]*"/g,"");
+      const typeAttr=typeValue ? ' t="'+typeValue+'"' : "";
+      return '<c'+attrs+typeAttr+'>'+innerXml+'</c>';
     }
 
-    const cellXfs=stylesDoc.getElementsByTagName("cellXfs")[0];
-    if (!cellXfs) throw new Error("Excelのセル書式を確認できません。");
-
-    const xfs=Array.from(cellXfs.children).filter(x=>x.localName==="xf");
-    const base=xfs[current];
-    if (!base) throw new Error("Excelのセル書式番号を確認できません。");
-
-    let alignment=Array.from(base.children).find(x=>x.localName==="alignment");
-    if (alignment && alignment.getAttribute("wrapText")==="1") {
-      cache.set(current,current);
-      return;
+    if (match) {
+      return sheetXml.slice(0,match.index)+
+        build(match[1])+
+        sheetXml.slice(match.index+match[0].length);
     }
 
-    const clone=base.cloneNode(true);
-    alignment=Array.from(clone.children).find(x=>x.localName==="alignment");
+    const fullCell=new RegExp(
+      '<c\\b(?=[^>]*\\br="'+addr+'")([^>]*)>[\\s\\S]*?<\\/c>'
+    );
+    match=fullCell.exec(sheetXml);
+    if (!match) throw new Error("原本のセル "+address+" が見つかりません。");
 
-    if (!alignment) {
-      const ns=stylesDoc.documentElement.namespaceURI;
-      alignment=stylesDoc.createElementNS(ns,"alignment");
-      clone.appendChild(alignment);
-    }
-
-    alignment.setAttribute("wrapText","1");
-    clone.setAttribute("applyAlignment","1");
-    cellXfs.appendChild(clone);
-
-    const newIndex=Array.from(cellXfs.children).filter(x=>x.localName==="xf").length-1;
-    cellXfs.setAttribute("count",String(newIndex+1));
-    cache.set(current,newIndex);
-    cell.setAttribute("s",String(newIndex));
+    return sheetXml.slice(0,match.index)+
+      build(match[1])+
+      sheetXml.slice(match.index+match[0].length);
   }
 
-  function ensureShiftColorConditionalFormatting(sheetDoc,stylesDoc) {
-    const formulas=Array.from(sheetDoc.getElementsByTagName("formula"))
-      .map(f=>(f.textContent || "").replace(/\s+/g,""));
-
-    // すでにこのアプリの色ルールが入っているファイルなら重複追加しない。
-    const marker='OR(ISNUMBER(SEARCH("有休",B6)),ISNUMBER(SEARCH("有給",B6)))'
-      .replace(/\s+/g,"");
-    if (formulas.includes(marker)) return;
-
-    // 既存の土日祝ルールより、勤務・有休・公休の色を優先する。
-    Array.from(sheetDoc.getElementsByTagName("cfRule")).forEach(rule=>{
-      const current=Number(rule.getAttribute("priority") || "100");
-      rule.setAttribute("priority",String(current+30));
-    });
-
-    const stylesNs=stylesDoc.documentElement.namespaceURI;
-    let dxfs=stylesDoc.getElementsByTagName("dxfs")[0];
-    if (!dxfs) {
-      dxfs=stylesDoc.createElementNS(stylesNs,"dxfs");
-      dxfs.setAttribute("count","0");
-      stylesDoc.documentElement.appendChild(dxfs);
-    }
-
-    function addDxf(fillRgb=null) {
-      const dxf=stylesDoc.createElementNS(stylesNs,"dxf");
-
-      const font=stylesDoc.createElementNS(stylesNs,"font");
-      const fontColor=stylesDoc.createElementNS(stylesNs,"color");
-      fontColor.setAttribute("rgb","FF000000");
-      font.appendChild(fontColor);
-      dxf.appendChild(font);
-
-      if (fillRgb) {
-        const fill=stylesDoc.createElementNS(stylesNs,"fill");
-        const pattern=stylesDoc.createElementNS(stylesNs,"patternFill");
-        pattern.setAttribute("patternType","solid");
-
-        // differential style(dxf)の塗りは bgColor に色を持たせる。
-        // これでExcel側で黒塗りになる問題を避ける。
-        const bg=stylesDoc.createElementNS(stylesNs,"bgColor");
-        bg.setAttribute("rgb",fillRgb);
-        pattern.appendChild(bg);
-
-        fill.appendChild(pattern);
-        dxf.appendChild(fill);
-      }
-
-      dxfs.appendChild(dxf);
-      const id=Array.from(dxfs.children).filter(x=>x.localName==="dxf").length-1;
-      dxfs.setAttribute("count",String(id+1));
-      return id;
-    }
-
-    // 添付のヤンキース10月シフトに合わせた色
-    // 日勤 = 黄橙、通常夜勤 = 薄紫、7時～翌6時 = 紫、有休/有給 = ピンク
-    const orangeDxf=addDxf("FFFFC000");
-    const nightDxf=addDxf("FFCCCCFF");
-    const longNightDxf=addDxf("FFCC99FF");
-    const paidLeaveDxf=addDxf("FFFF6699");
-    const blackOnlyDxf=addDxf(null);
-
-    const sheetNs=sheetDoc.documentElement.namespaceURI;
-    const firstExisting=Array.from(sheetDoc.documentElement.children)
-      .find(x=>x.localName==="conditionalFormatting");
-
-    function addRule(sqref,formulaText,dxfId,priority,stopIfTrue=true) {
-      const cf=sheetDoc.createElementNS(sheetNs,"conditionalFormatting");
-      cf.setAttribute("sqref",sqref);
-
-      const rule=sheetDoc.createElementNS(sheetNs,"cfRule");
-      rule.setAttribute("type","expression");
-      rule.setAttribute("dxfId",String(dxfId));
-      rule.setAttribute("priority",String(priority));
-      if (stopIfTrue) rule.setAttribute("stopIfTrue","1");
-
-      const formula=sheetDoc.createElementNS(sheetNs,"formula");
-      formula.textContent=formulaText;
-      rule.appendChild(formula);
-      cf.appendChild(rule);
-
-      if (firstExisting) {
-        sheetDoc.documentElement.insertBefore(cf,firstExisting);
-      } else {
-        sheetDoc.documentElement.appendChild(cf);
-      }
-    }
-
-    let p=1;
-
-    // 有休・有給：ピンク背景＋黒文字
-    addRule(
-      "B6:AF11",
-      'OR(ISNUMBER(SEARCH("有休",B6)),ISNUMBER(SEARCH("有給",B6)))',
-      paidLeaveDxf,p++
-    );
-    addRule(
-      "B14:AF17",
-      'OR(ISNUMBER(SEARCH("有休",B14)),ISNUMBER(SEARCH("有給",B14)))',
-      paidLeaveDxf,p++
-    );
-
-    // 公休：文字は必ず黒。土日祝の文字色ルールより優先。
-    addRule(
-      "B6:AF11",
-      'ISNUMBER(SEARCH("公休",B6))',
-      blackOnlyDxf,p++,false
-    );
-    addRule(
-      "B14:AF17",
-      'ISNUMBER(SEARCH("公休",B14))',
-      blackOnlyDxf,p++,false
-    );
-
-    // 日勤職員：時間が入ったら黄橙背景＋黒文字
-    addRule(
-      "B6:AF10",
-      'ISNUMBER(SEARCH(":",B6))',
-      orangeDxf,p++
-    );
-
-    // 鎌田さん上段（夜勤兼務）
-    // 7:00～翌6:00 は濃い紫、22:00～6:00 は薄紫、
-    // 7:00～10:00 など日勤時間は黄橙。
-    addRule(
-      "B11:AF11",
-      'AND(ISNUMBER(SEARCH(":",B11)),LEFT(B11,4)="7:00",ISNUMBER(SEARCH("6:00",B11)))',
-      longNightDxf,p++
-    );
-    addRule(
-      "B11:AF11",
-      'AND(ISNUMBER(SEARCH(":",B11)),LEFT(B11,5)="22:00")',
-      nightDxf,p++
-    );
-    addRule(
-      "B11:AF11",
-      'ISNUMBER(SEARCH(":",B11))',
-      orangeDxf,p++
-    );
-
-    // 夜勤者：通常夜勤は薄紫。鎌田さんの7:00～翌6:00だけ濃い紫。
-    addRule(
-      "B14:AF17",
-      'AND(ISNUMBER(SEARCH(":",B14)),LEFT(B14,4)="7:00",ISNUMBER(SEARCH("6:00",B14)))',
-      longNightDxf,p++
-    );
-    addRule(
-      "B14:AF17",
-      'ISNUMBER(SEARCH(":",B14))',
-      nightDxf,p++
+  function setRawText(sheetXml,sheetDoc,address,text) {
+    assertWritableShiftCell(sheetDoc,address);
+    const safe=escapeXmlText(text);
+    return replaceRawCell(
+      sheetXml,
+      address,
+      '<is><t xml:space="preserve">'+safe+'</t></is>',
+      "inlineStr"
     );
   }
 
-  function setXmlText(sheetDoc,address,text,options={}) {
-    const cell=assertWritableShiftCell(sheetDoc,address);
+  function setRawNumber(sheetXml,sheetDoc,address,value) {
+    assertWritableShiftCell(sheetDoc,address);
+    return replaceRawCell(sheetXml,address,"<v>"+Number(value)+"</v>",null);
+  }
 
-    if (options.wrap && options.stylesDoc && options.styleCache) {
-      ensureWrappedCellStyle(options.stylesDoc,cell,options.styleCache);
-    }
-
-    clearXmlCellValue(cell);
-    cell.setAttribute("t","inlineStr");
-
-    const ns=sheetDoc.documentElement.namespaceURI;
-    const is=sheetDoc.createElementNS(ns,"is");
-    const t=sheetDoc.createElementNS(ns,"t");
-    t.setAttributeNS("http://www.w3.org/XML/1998/namespace","xml:space","preserve");
-    t.textContent=String(text);
-    is.appendChild(t);
-    cell.appendChild(is);
+  function clearRawCell(sheetXml,sheetDoc,address) {
+    assertWritableShiftCell(sheetDoc,address);
+    return replaceRawCell(sheetXml,address,"",null);
   }
 
   function findRowInOfficialSheet(sheetDoc,sharedStrings,target,start,end) {
@@ -1181,18 +1010,13 @@
     for (let row=start;row<=end;row++) {
       const cell=findXmlCell(sheetDoc,"A"+row);
       const actual=normalizeStaffName(xmlCellText(cell,sharedStrings));
-
-      // 通常は完全一致。古いExcel由来のふりがな情報が文字列側に
-      // 残っていても、氏名本体が先頭一致すれば同じ職員として扱う。
-      if (actual===norm || actual.startsWith(norm)) {
-        return row;
-      }
+      if (actual===norm || actual.startsWith(norm)) return row;
     }
     return null;
   }
 
   function columnForDay(day) {
-    let n=day+1; // A列が名前、1日はB列
+    let n=day+1;
     let result="";
     while (n>0) {
       const rem=(n-1)%26;
@@ -1202,17 +1026,147 @@
     return result;
   }
 
-  function markWorkbookForRecalculation(workbookDoc) {
-    const root=workbookDoc.documentElement;
-    const ns=root.namespaceURI;
-    let calcPr=workbookDoc.getElementsByTagName("calcPr")[0];
-    if (!calcPr) {
-      calcPr=workbookDoc.createElementNS(ns,"calcPr");
-      root.appendChild(calcPr);
+  function markWorkbookForRecalculationRaw(workbookXml) {
+    const calcRe=/<calcPr\\b([^>]*)\\/>/;
+    const m=calcRe.exec(workbookXml);
+
+    function upsert(attrs,name,value) {
+      const re=new RegExp('\\s+'+name+'="[^"]*"',"g");
+      attrs=attrs.replace(re,"");
+      return attrs+' '+name+'="'+value+'"';
     }
-    calcPr.setAttribute("calcMode","auto");
-    calcPr.setAttribute("fullCalcOnLoad","1");
-    calcPr.setAttribute("forceFullCalc","1");
+
+    if (m) {
+      let attrs=m[1];
+      attrs=upsert(attrs,"calcMode","auto");
+      attrs=upsert(attrs,"fullCalcOnLoad","1");
+      attrs=upsert(attrs,"forceFullCalc","1");
+      const repl="<calcPr"+attrs+"/>";
+      return workbookXml.slice(0,m.index)+
+        repl+
+        workbookXml.slice(m.index+m[0].length);
+    }
+
+    return workbookXml.replace(
+      "</workbook>",
+      '<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>'
+    );
+  }
+
+  function addSafeShiftColorRules(stylesXml,sheetXml) {
+    if (sheetXml.includes('SEARCH("有休",B6)')) {
+      return {stylesXml,sheetXml};
+    }
+
+    const countMatch=/<dxfs\\s+count="(\\d+)"/.exec(stylesXml);
+    if (!countMatch || !stylesXml.includes("</dxfs>")) {
+      throw new Error("Excelの色設定を確認できません。");
+    }
+
+    const base=Number(countMatch[1]);
+    const newDxfs=[
+      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFFFC000"/><bgColor indexed="64"/></patternFill></fill></dxf>',
+      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFD9E1F2"/><bgColor indexed="64"/></patternFill></fill></dxf>',
+      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFD9B3FF"/><bgColor indexed="64"/></patternFill></fill></dxf>',
+      '<dxf><font><color rgb="FF000000"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFFF99CC"/><bgColor indexed="64"/></patternFill></fill></dxf>',
+      '<dxf><font><color rgb="FF000000"/></font></dxf>'
+    ];
+
+    stylesXml=stylesXml.replace(
+      countMatch[0],
+      countMatch[0].replace(
+        'count="'+base+'"',
+        'count="'+(base+newDxfs.length)+'"'
+      )
+    );
+    stylesXml=stylesXml.replace(
+      "</dxfs>",
+      newDxfs.join("")+"</dxfs>"
+    );
+
+    function rule(range,formula,dxfId,priority,stop=true) {
+      return '<conditionalFormatting sqref="'+range+'">'+
+        '<cfRule type="expression" dxfId="'+dxfId+'" priority="'+priority+'"'+
+        (stop ? ' stopIfTrue="1"' : '')+'>'+
+        '<formula>'+formula+'</formula>'+
+        '</cfRule></conditionalFormatting>';
+    }
+
+    const rules=[
+      rule(
+        "B6:AF11",
+        'OR(ISNUMBER(SEARCH("有休",B6)),ISNUMBER(SEARCH("有給",B6)))',
+        base+3,1,true
+      ),
+      rule(
+        "B14:AF17",
+        'OR(ISNUMBER(SEARCH("有休",B14)),ISNUMBER(SEARCH("有給",B14)))',
+        base+3,2,true
+      ),
+      rule(
+        "B11:AF11",
+        'AND(ISNUMBER(SEARCH(":",B11)),LEFT(B11,4)="7:00",ISNUMBER(SEARCH("6:00",B11)))',
+        base+2,3,true
+      ),
+      rule(
+        "B14:AF17",
+        'AND(ISNUMBER(SEARCH(":",B14)),LEFT(B14,4)="7:00",ISNUMBER(SEARCH("6:00",B14)))',
+        base+2,4,true
+      ),
+      rule(
+        "B11:AF11",
+        'AND(ISNUMBER(SEARCH(":",B11)),LEFT(B11,5)="22:00")',
+        base+1,5,true
+      ),
+      rule(
+        "B14:AF17",
+        'ISNUMBER(SEARCH(":",B14))',
+        base+1,6,true
+      ),
+      rule(
+        "B6:AF10",
+        'ISNUMBER(SEARCH(":",B6))',
+        base,7,true
+      ),
+      rule(
+        "B11:AF11",
+        'ISNUMBER(SEARCH(":",B11))',
+        base,8,true
+      ),
+      rule(
+        "B6:AF11",
+        'ISNUMBER(SEARCH("公休",B6))',
+        base+4,9,false
+      ),
+      rule(
+        "B14:AF17",
+        'ISNUMBER(SEARCH("公休",B14))',
+        base+4,10,false
+      )
+    ].join("");
+
+    const anchors=[
+      "<dataValidations",
+      "<hyperlinks",
+      "<printOptions",
+      "<pageMargins",
+      "<pageSetup",
+      "<headerFooter",
+      "<extLst"
+    ]
+      .map(tag=>sheetXml.indexOf(tag))
+      .filter(pos=>pos>=0);
+
+    const insertAt=anchors.length
+      ? Math.min(...anchors)
+      : sheetXml.lastIndexOf("</worksheet>");
+
+    sheetXml=
+      sheetXml.slice(0,insertAt)+
+      rules+
+      sheetXml.slice(insertAt);
+
+    return {stylesXml,sheetXml};
   }
 
   function verifyOfficialTemplate(sheetDoc) {
@@ -1247,22 +1201,21 @@
 
       excelStage="原本確認";
       const official=await getOfficialShiftSheet(zip);
-      const sheetDoc=official.sheetDoc;
-      const stylesDoc=official.stylesDoc;
       const sharedStrings=await loadSharedStrings(zip);
-      const wrappedStyleCache=new Map();
+      const sheetDoc=official.sheetDoc;
       verifyOfficialTemplate(sheetDoc);
-      ensureShiftColorConditionalFormatting(sheetDoc,stylesDoc);
+
+      let sheetXml=official.sheetXml;
+      let stylesXml=official.stylesXml;
+      let workbookXml=official.workbookXml;
 
       const y=currentDate.getFullYear();
       const m=currentDate.getMonth();
       const month=m+1;
       const lastDay=new Date(y,m+1,0).getDate();
 
-      // ★原本の年月セルだけ更新。タイトル・日付・曜日・集計は
-      // 原本の数式に任せる。
-      setXmlNumber(sheetDoc,"A3",y);
-      setXmlNumber(sheetDoc,"B3",month);
+      sheetXml=setRawNumber(sheetXml,sheetDoc,"A3",y);
+      sheetXml=setRawNumber(sheetXml,sheetDoc,"B3",month);
 
       const dayRows={
         "藤井亮輔":findRowInOfficialSheet(sheetDoc,sharedStrings,"藤井亮輔",1,13),
@@ -1284,84 +1237,69 @@
       Object.entries(dayRows).forEach(([name,row])=>{ if(!row) missing.push(name); });
       Object.entries(nightRows).forEach(([name,row])=>{ if(!row) missing.push(name); });
       if (!kamadaDayRow) missing.push("鎌田フサ子（夜勤兼務）");
-
       if (missing.length) {
         throw new Error("★原本.xlsxで職員行を確認できません："+missing.join("、"));
       }
 
       excelStage="希望反映";
 
-      // 日勤3名：休み希望がある日だけ「公休」。
-      // 希望がない日は原本のセルを触らない。
       for (const [name,row] of Object.entries(dayRows)) {
         for (let day=1;day<=lastDay;day++) {
           const key=dateKey(y,m,day);
           const reg=findRegistrationByNameDate(name,key);
           if (reg && reg.shiftPattern==="OFF") {
-            setXmlText(sheetDoc,columnForDay(day)+row,"公休");
-          }
-        }
-      }
-
-      // 夜勤4名：
-      // その月に1日でも「働ける日」を入力した職員だけ、
-      // 未選択日を「公休」として反映する。
-      // まだ希望入力が0日の職員は、未提出とみなして原本を触らない。
-      const nightSubmitted={};
-
-      for (const name of Object.keys(nightRows)) {
-        nightSubmitted[name]=false;
-        for (let day=1;day<=lastDay;day++) {
-          const key=dateKey(y,m,day);
-          if (findRegistrationByNameDate(name,key)) {
-            nightSubmitted[name]=true;
-            break;
+            sheetXml=setRawText(
+              sheetXml,
+              sheetDoc,
+              columnForDay(day)+row,
+              "公休"
+            );
           }
         }
       }
 
       for (const [name,row] of Object.entries(nightRows)) {
-        if (!nightSubmitted[name]) continue;
-
-        for (let day=1;day<=lastDay;day++) {
-          setXmlText(sheetDoc,columnForDay(day)+row,"公休");
-        }
-      }
-
-      for (const [name,row] of Object.entries(nightRows)) {
-        if (!nightSubmitted[name]) continue;
+        const registrations=[];
 
         for (let day=1;day<=lastDay;day++) {
           const key=dateKey(y,m,day);
           const reg=findRegistrationByNameDate(name,key);
-          if (!reg) continue;
+          if (reg) registrations.push({day,reg});
+        }
 
-          if (name==="鎌田フサ子" && reg.shiftPattern==="07:00-10:00") {
-            // 上段の兼務行は、7:00-10:00を選んだ日だけ書く。
-            // それ以外の日は管理者が手入力できるよう原本を触らない。
-            setXmlText(
+        if (!registrations.length) continue;
+
+        for (let day=1;day<=lastDay;day++) {
+          sheetXml=setRawText(
+            sheetXml,
+            sheetDoc,
+            columnForDay(day)+row,
+            "公休"
+          );
+        }
+
+        for (const item of registrations) {
+          const address=columnForDay(item.day)+row;
+
+          if (name==="鎌田フサ子" && item.reg.shiftPattern==="07:00-10:00") {
+            sheetXml=setRawText(
+              sheetXml,
               sheetDoc,
-              columnForDay(day)+kamadaDayRow,
-              excelPattern(reg.shiftPattern),
-              {wrap:true,stylesDoc,styleCache:wrappedStyleCache}
+              columnForDay(item.day)+kamadaDayRow,
+              excelPattern(item.reg.shiftPattern)
             );
-            setXmlText(sheetDoc,columnForDay(day)+row,"公休");
+            sheetXml=setRawText(sheetXml,sheetDoc,address,"公休");
           } else {
-            const label=excelPattern(reg.shiftPattern || defaultPatternForName(name));
+            const label=excelPattern(
+              item.reg.shiftPattern || defaultPatternForName(name)
+            );
             if (label) {
-              setXmlText(
-                sheetDoc,
-                columnForDay(day)+row,
-                label,
-                {wrap:true,stylesDoc,styleCache:wrappedStyleCache}
-              );
+              sheetXml=setRawText(sheetXml,sheetDoc,address,label);
             }
           }
         }
       }
 
-      // 31日がない月に、原本へ以前の値が残っていた場合だけ
-      // 対象職員の余分な日を空にする。数式セルには触らない。
       for (let day=lastDay+1;day<=31;day++) {
         const col=columnForDay(day);
         for (const row of [
@@ -1369,18 +1307,19 @@
           kamadaDayRow,
           ...Object.values(nightRows)
         ]) {
-          const cell=assertWritableShiftCell(sheetDoc,col+row);
-          clearXmlCellValue(cell);
+          sheetXml=clearRawCell(sheetXml,sheetDoc,col+row);
         }
       }
 
-      markWorkbookForRecalculation(official.workbookDoc);
+      const colored=addSafeShiftColorRules(stylesXml,sheetXml);
+      stylesXml=colored.stylesXml;
+      sheetXml=colored.sheetXml;
 
-      // 元の数式・祝日シート・コメント・印刷設定は保持し、
-      // 年月、勤務欄、必要最小限の表示書式だけ更新する。
-      zip.file(official.workbookPath,serializeXml(official.workbookDoc));
-      zip.file(official.stylesPath,serializeXml(stylesDoc));
-      zip.file(official.sheetPath,serializeXml(sheetDoc));
+      workbookXml=markWorkbookForRecalculationRaw(workbookXml);
+
+      zip.file(official.workbookPath,workbookXml);
+      zip.file(official.stylesPath,stylesXml);
+      zip.file(official.sheetPath,sheetXml);
 
       excelStage="Excel保存";
       const out=await zip.generateAsync({
@@ -1402,7 +1341,7 @@
       a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
 
-      showMessage("★原本の数式・書式を残したまま、希望を反映しました。");
+      showMessage("★原本の書式を壊さず、希望と自動色を反映しました。");
     } catch(error) {
       console.error("Excel export failed at",excelStage,error);
       showMessage(
