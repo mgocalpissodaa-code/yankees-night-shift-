@@ -217,7 +217,7 @@
         表示中の年月も原本へ自動で合わせます。
       </div>
       <div class="excel-box">
-        <label for="excelFile">ヤンキース ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（黒塗り修正版）</span></label>
+        <label for="excelFile">ヤンキース ★原本.xlsx <span style="font-size:11px;color:#64748b;font-weight:600;">（二段・土日黒修正版）</span></label>
         <input id="excelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <button id="excelExportBtn" class="success full" style="margin-top:10px;">この月の希望を反映してExcel出力</button>
       </div>
@@ -1057,6 +1057,107 @@
     );
   }
 
+  function patchScheduleStylesRaw(stylesXml) {
+    // 勤務欄の元書式に折り返しを追加する。
+    // "22:00\n3:00" などの改行をExcel上でも2段表示にする。
+    const wrapStyleIds=new Set([
+      18,19,20,21,22,23,
+      34,35,36,37,38,39,
+      60,61,62,63,64
+    ]);
+
+    const cellXfsMatch=new RegExp(
+      "<cellXfs\\b[^>]*>[\\s\\S]*?<\\/cellXfs>"
+    ).exec(stylesXml);
+    if (!cellXfsMatch) {
+      throw new Error("Excelのセル書式を確認できません。");
+    }
+
+    let xfIndex=0;
+    let patchedCellXfs=cellXfsMatch[0].replace(
+      new RegExp("<xf\\b[^>]*(?:\\/>|>[\\s\\S]*?<\\/xf>)","g"),
+      xf=>{
+        const index=xfIndex++;
+        if (!wrapStyleIds.has(index)) return xf;
+
+        let out=xf;
+
+        if (/\\bapplyAlignment="/.test(out)) {
+          out=out.replace(
+            new RegExp('\\bapplyAlignment="[^"]*"'),
+            'applyAlignment="1"'
+          );
+        } else {
+          out=out.replace(/^<xf\\b/,'<xf applyAlignment="1"');
+        }
+
+        if (new RegExp("<alignment\\b[^>]*\\/>").test(out)) {
+          out=out.replace(
+            new RegExp("<alignment\\b([^>]*)\\/>"),
+            (m,attrs)=>{
+              let a=attrs;
+              if (/\\bwrapText="/.test(a)) {
+                a=a.replace(
+                  new RegExp('\\bwrapText="[^"]*"'),
+                  'wrapText="1"'
+                );
+              } else {
+                a+=' wrapText="1"';
+              }
+              return '<alignment'+a+'/>';
+            }
+          );
+        } else if (out.includes("</xf>")) {
+          out=out.replace(
+            "</xf>",
+            '<alignment horizontal="center" vertical="center" wrapText="1"/></xf>'
+          );
+        } else if (out.endsWith("/>")) {
+          out=out.slice(0,-2)+
+            '><alignment horizontal="center" vertical="center" wrapText="1"/></xf>';
+        }
+
+        return out;
+      }
+    );
+
+    stylesXml=
+      stylesXml.slice(0,cellXfsMatch.index)+
+      patchedCellXfs+
+      stylesXml.slice(cellXfsMatch.index+cellXfsMatch[0].length);
+
+    // ★原本では勤務欄の土日色に文字色も含まれている。
+    // 勤務欄用dxfだけ文字色を外し、背景色だけ残す。
+    // 日付見出しの赤・青はそのまま。
+    const bodyWeekendDxfIds=new Set([1,2,9,10]);
+    const dxfsMatch=new RegExp(
+      "<dxfs\\b[^>]*>[\\s\\S]*?<\\/dxfs>"
+    ).exec(stylesXml);
+    if (!dxfsMatch) {
+      throw new Error("Excelの条件付き書式を確認できません。");
+    }
+
+    let dxfIndex=0;
+    const patchedDxfs=dxfsMatch[0].replace(
+      new RegExp("<dxf\\b[^>]*>[\\s\\S]*?<\\/dxf>","g"),
+      dxf=>{
+        const index=dxfIndex++;
+        if (!bodyWeekendDxfIds.has(index)) return dxf;
+        return dxf.replace(
+          new RegExp("<font>[\\s\\S]*?<\\/font>"),
+          ""
+        );
+      }
+    );
+
+    stylesXml=
+      stylesXml.slice(0,dxfsMatch.index)+
+      patchedDxfs+
+      stylesXml.slice(dxfsMatch.index+dxfsMatch[0].length);
+
+    return stylesXml;
+  }
+
   function addSafeShiftColorRules(stylesXml,sheetXml) {
     if (sheetXml.includes('SEARCH("有休",B6)')) {
       return {stylesXml,sheetXml};
@@ -1317,6 +1418,8 @@
           sheetXml=clearRawCell(sheetXml,sheetDoc,col+row);
         }
       }
+
+      stylesXml=patchScheduleStylesRaw(stylesXml);
 
       const colored=addSafeShiftColorRules(stylesXml,sheetXml);
       stylesXml=colored.stylesXml;
