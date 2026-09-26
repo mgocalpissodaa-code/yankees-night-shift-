@@ -1178,6 +1178,7 @@
       attrs=upsert(attrs,"calcMode","auto");
       attrs=upsert(attrs,"fullCalcOnLoad","1");
       attrs=upsert(attrs,"forceFullCalc","1");
+      attrs=upsert(attrs,"calcOnSave","1");
       const repl="<calcPr"+attrs+"/>";
       return workbookXml.slice(0,m.index)+
         repl+
@@ -1186,7 +1187,7 @@
 
     return workbookXml.replace(
       "</workbook>",
-      '<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>'
+      '<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1" calcOnSave="1"/></workbook>'
     );
   }
 
@@ -1361,6 +1362,7 @@
       const sheetDoc=official.sheetDoc;
       verifyOfficialTemplate(sheetDoc);
 
+      let workbookXml=official.workbookXml;
       let sheetXml=official.sheetXml;
       let stylesXml=official.stylesXml;
 
@@ -1487,6 +1489,9 @@
       stylesXml=wrapped.stylesXml;
       sheetXml=wrapped.sheetXml;
 
+      workbookXml=markWorkbookForRecalculationRaw(workbookXml);
+
+      zip.file(official.workbookPath,workbookXml);
       zip.file(official.stylesPath,stylesXml);
       zip.file(official.sheetPath,sheetXml);
 
