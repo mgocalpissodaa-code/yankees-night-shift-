@@ -133,35 +133,68 @@
       margin-top:8px;
     }
     .setting-checks {
-      display:flex;
-      gap:12px;
-      flex-wrap:wrap;
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:8px;
       margin-top:10px;
       font-weight:800;
-      font-size:13px;
+      font-size:14px;
     }
     .setting-checks label {
       display:flex;
       align-items:center;
-      gap:6px;
+      justify-content:flex-start;
+      gap:8px;
+      margin:0;
+      padding:10px 12px;
+      border:1px solid #e2e8f0;
+      border-radius:10px;
+      background:#f8fafc;
+      line-height:1.2;
+      white-space:nowrap;
+    }
+    .setting-checks input[type="checkbox"],
+    .time-next input[type="checkbox"] {
+      width:22px;
+      height:22px;
+      min-width:22px;
+      padding:0;
+      margin:0;
+      flex:0 0 22px;
+      border-radius:6px;
     }
     .time-list { display:grid; gap:8px; margin-top:10px; }
     .time-row {
       display:grid;
       grid-template-columns:1fr 1fr auto auto;
-      gap:6px;
-      align-items:center;
-      padding:8px;
+      gap:8px;
+      align-items:end;
+      padding:10px;
       border-radius:10px;
       background:#f8fafc;
       border:1px solid #e2e8f0;
     }
-    .time-row input[type="time"] { min-width:0; }
+    .time-field { min-width:0; }
+    .time-field-title {
+      display:block;
+      margin:0 0 4px;
+      color:#64748b;
+      font-size:12px;
+      font-weight:800;
+    }
+    .time-row input[type="time"] {
+      width:100%;
+      min-width:0;
+      padding:10px 8px;
+      font-size:16px;
+    }
     .time-next {
       display:flex;
       align-items:center;
-      gap:4px;
-      font-size:12px;
+      gap:6px;
+      margin:0;
+      padding:10px 8px;
+      font-size:13px;
       font-weight:800;
       white-space:nowrap;
     }
@@ -172,9 +205,10 @@
     }
     @media (max-width:560px) {
       .setting-grid { grid-template-columns:1fr; }
+      .setting-checks { grid-template-columns:1fr 1fr; }
       .time-row { grid-template-columns:1fr 1fr; }
-      .time-next { grid-column:1; }
-      .time-row .danger { grid-column:2; }
+      .time-next { grid-column:1; align-self:center; }
+      .time-row .danger { grid-column:2; width:100%; }
     }
     .small-btn { padding:9px 11px; font-size:13px; }
     .count-summary {
@@ -902,15 +936,29 @@
           tr.dataset.originalEnd=opt && opt.end ? opt.end : "";
           tr.dataset.originalNext=opt && opt.next_day ? "1" : "0";
 
+          const startWrap=document.createElement("div");
+          startWrap.className="time-field";
+          const startTitle=document.createElement("span");
+          startTitle.className="time-field-title";
+          startTitle.textContent="開始";
           const start=document.createElement("input");
           start.type="time";
           start.value=opt && opt.start ? opt.start : "22:00";
           start.setAttribute("aria-label","開始時刻");
+          startWrap.appendChild(startTitle);
+          startWrap.appendChild(start);
 
+          const endWrap=document.createElement("div");
+          endWrap.className="time-field";
+          const endTitle=document.createElement("span");
+          endTitle.className="time-field-title";
+          endTitle.textContent="終了";
           const end=document.createElement("input");
           end.type="time";
           end.value=opt && opt.end ? opt.end : "06:00";
           end.setAttribute("aria-label","終了時刻");
+          endWrap.appendChild(endTitle);
+          endWrap.appendChild(end);
 
           const nextLabel=document.createElement("label");
           nextLabel.className="time-next";
@@ -926,8 +974,8 @@
           remove.textContent="削除";
           remove.addEventListener("click",()=>tr.remove());
 
-          tr.appendChild(start);
-          tr.appendChild(end);
+          tr.appendChild(startWrap);
+          tr.appendChild(endWrap);
           tr.appendChild(nextLabel);
           tr.appendChild(remove);
           timeList.appendChild(tr);
