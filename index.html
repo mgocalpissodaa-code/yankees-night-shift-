@@ -126,6 +126,7 @@
       <div class="month-title" id="monthTitle"></div>
       <button class="nav-btn" id="nextMonth">›</button>
     </div>
+    <div id="deadlineInfo" class="mode-box" style="margin:8px 0 12px;"></div>
     <div class="weekdays">
       <div class="weekday sun">日</div><div class="weekday">月</div><div class="weekday">火</div>
       <div class="weekday">水</div><div class="weekday">木</div><div class="weekday">金</div>
@@ -180,6 +181,7 @@
   const modeInfo = document.getElementById("modeInfo");
   const calendar = document.getElementById("calendar");
   const monthTitle = document.getElementById("monthTitle");
+  const deadlineInfo = document.getElementById("deadlineInfo");
   const registerBtn = document.getElementById("registerBtn");
   const cancelBtn = document.getElementById("cancelBtn");
   const selectedInfo = document.getElementById("selectedInfo");
@@ -264,6 +266,37 @@
   function todayKey() {
     const d = new Date();
     return dateKey(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function submissionDeadline(year, month) {
+    // 対象月の前月23日いっぱいまで。24日0:00で締切。
+    return new Date(year, month - 1, 24, 0, 0, 0, 0);
+  }
+
+  function submissionDeadlineLabel(year, month) {
+    const d = new Date(year, month - 1, 23);
+    return `${d.getFullYear()}年${d.getMonth() + 1}月23日 23:59`;
+  }
+
+  function isSubmissionOpen(year = currentDate.getFullYear(), month = currentDate.getMonth()) {
+    return new Date() < submissionDeadline(year, month);
+  }
+
+  function updateDeadlineInfo() {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const label = submissionDeadlineLabel(year, month);
+    const target = `${year}年${month + 1}月分`;
+
+    if (isSubmissionOpen(year, month)) {
+      deadlineInfo.textContent = `${target}の希望締切：${label}まで`;
+      deadlineInfo.style.background = "#ecfdf5";
+      deadlineInfo.style.color = "#166534";
+    } else {
+      deadlineInfo.textContent = `${target}の希望入力は締め切りました（${label}まで）`;
+      deadlineInfo.style.background = "#fee2e2";
+      deadlineInfo.style.color = "#991b1b";
+    }
   }
 
   function showMessage(text, type = "success") {
@@ -404,6 +437,9 @@
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     monthTitle.textContent = `${year}年 ${month + 1}月`;
+    updateDeadlineInfo();
+    const submissionOpen = isSubmissionOpen(year, month);
+    if (!submissionOpen) selectedDates.clear();
 
     const firstWeekday = new Date(year, month, 1).getDay();
     const lastDay = new Date(year, month + 1, 0).getDate();
@@ -442,7 +478,7 @@
         ${isSelected ? '<div class="selected-mark">✓ 選択中</div>' : ""}
       `;
 
-      if (!isPast) {
+      if (!isPast && submissionOpen) {
         el.addEventListener("click", () => {
           if (!staffSelect.value) {
             showMessage("先に自分の名前を選択してください。", "error");
@@ -467,6 +503,13 @@
 
     if (!staff || !rule) {
       selectedInfo.textContent = "先に名前を選択してください";
+      registerBtn.disabled = true;
+      cancelBtn.style.display = "none";
+      return;
+    }
+
+    if (!isSubmissionOpen()) {
+      selectedInfo.textContent = "この月の希望入力は締め切りました";
       registerBtn.disabled = true;
       cancelBtn.style.display = "none";
       return;
@@ -509,6 +552,10 @@
   });
 
   registerBtn.addEventListener("click", async () => {
+    if (!isSubmissionOpen()) {
+      showMessage("この月の希望入力は締め切りました。", "error");
+      return;
+    }
     const staff = selectedStaff();
     const pattern = chosenPattern();
     if (!staff || !pattern) return;
@@ -545,6 +592,10 @@
   });
 
   cancelBtn.addEventListener("click", async () => {
+    if (!isSubmissionOpen()) {
+      showMessage("締切後は職員画面から変更・取消できません。", "error");
+      return;
+    }
     const staff = selectedStaff();
     if (!staff) return;
 
@@ -566,7 +617,7 @@
     let failed = 0;
 
     for (const workDate of dates) {
-      const {error} = await client.rpc("cancel_night", {
+      const {error} = await client.rpc("cancel_shift_request", {
         p_staff_id:staff.id,
         p_work_date:workDate
       });
