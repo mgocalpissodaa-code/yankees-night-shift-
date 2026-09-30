@@ -305,6 +305,8 @@
   let selectedRegistration = null;
   let editCancelArmed = false;
   let editCancelTimer = null;
+  let bulkCancelArmed = false;
+  let bulkCancelTimer = null;
 
   const loginView = document.getElementById("loginView");
   const adminView = document.getElementById("adminView");
@@ -785,8 +787,21 @@
     const dates=target.dates;
     const name=displayStaffName(staff.name);
 
-    if (!confirm(name+"さんの登録を"+dates.length+"日分まとめて取り消しますか？")) return;
+    // スマホやLINE内ブラウザでも確実に動くように2回タップ確認にする。
+    if (!bulkCancelArmed) {
+      bulkCancelArmed=true;
+      bulkCancelBtn.textContent="もう一度押すと"+dates.length+"日分を取り消します";
+      showMessage(name+"さんの登録を"+dates.length+"日分取り消します。確認のため、赤いボタンをもう一度押してください。","error");
+      clearTimeout(bulkCancelTimer);
+      bulkCancelTimer=setTimeout(()=>{
+        bulkCancelArmed=false;
+        updateRegisterArea();
+      },7000);
+      return;
+    }
 
+    bulkCancelArmed=false;
+    clearTimeout(bulkCancelTimer);
     bulkCancelBtn.disabled=true;
     registerBtn.disabled=true;
     bulkCancelBtn.textContent="一括取消中...";
