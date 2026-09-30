@@ -103,6 +103,21 @@
     .staff-manage-name { font-weight:900; word-break:break-all; }
     .staff-manage-status { margin-top:3px; font-size:12px; color:#64748b; font-weight:700; }
     .staff-manage-actions { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .staff-manage-inline {
+      width:100%;
+      display:grid;
+      grid-template-columns:1fr auto auto;
+      gap:6px;
+      margin-top:8px;
+    }
+    .staff-manage-inline input {
+      min-width:0;
+      padding:9px 10px;
+      border:1px solid #cbd5e1;
+      border-radius:10px;
+      font-size:16px;
+    }
+    .staff-manage-inline button { white-space:nowrap; }
     .small-btn { padding:9px 11px; font-size:13px; }
     .count-summary {
       display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
@@ -477,54 +492,165 @@
       info.appendChild(name); info.appendChild(status);
 
       const actions=document.createElement("div"); actions.className="staff-manage-actions";
-      const renameBtn=document.createElement("button"); renameBtn.type="button"; renameBtn.className="secondary small-btn"; renameBtn.textContent="名前変更";
-      renameBtn.addEventListener("click",async()=>{
-        const next=prompt("新しい名前を入力してください。",staff.name);
-        if (next===null || !next.trim()) return;
-        const result=await client.rpc("admin_rename_staff",{p_staff_id:staff.id,p_name:next.trim()});
-        if (result.error) { showMessage("名前を変更できませんでした："+result.error.message,"error"); return; }
-        await refreshAll(); showMessage("職員名を変更しました。");
-      });
 
-      const pinBtn=document.createElement("button"); pinBtn.type="button"; pinBtn.className="success small-btn"; pinBtn.textContent="暗証番号";
-      pinBtn.addEventListener("click",async()=>{
-        const pin=prompt(staff.name+" さんの暗証番号を4〜6桁の数字で入力してください。");
-        if (pin===null) return;
-        if (!/^[0-9]{4,6}$/.test(pin.trim())) {
-          showMessage("暗証番号は4〜6桁の数字にしてください。","error");
-          return;
-        }
-        const confirmPin=prompt("確認のため、同じ暗証番号をもう一度入力してください。");
-        if (confirmPin===null) return;
-        if (pin.trim()!==confirmPin.trim()) {
-          showMessage("暗証番号が一致しません。","error");
-          return;
+      const editor=document.createElement("div");
+      editor.className="staff-manage-inline";
+      editor.style.display="none";
+
+      function closeInlineEditor() {
+        editor.innerHTML="";
+        editor.style.display="none";
+      }
+
+      function openTextEditor(mode) {
+        editor.innerHTML="";
+        editor.style.display="grid";
+
+        const input=document.createElement("input");
+        input.autocomplete="off";
+
+        if (mode==="rename") {
+          input.type="text";
+          input.value=staff.name;
+          input.maxLength=50;
+          input.placeholder="新しい職員名";
+        } else {
+          input.type="password";
+          input.inputMode="numeric";
+          input.maxLength=6;
+          input.placeholder="4〜6桁の暗証番号";
         }
 
-        const result=await client.rpc("admin_set_staff_pin",{
-          p_staff_id:staff.id,
-          p_pin:pin.trim()
+        const save=document.createElement("button");
+        save.type="button";
+        save.className="success small-btn";
+        save.textContent="保存";
+
+        const cancel=document.createElement("button");
+        cancel.type="button";
+        cancel.className="secondary small-btn";
+        cancel.textContent="閉じる";
+
+        cancel.addEventListener("click",closeInlineEditor);
+
+        save.addEventListener("click",async()=>{
+          const value=input.value.trim();
+
+          if (mode==="rename") {
+            if (!value) {
+              showMessage("新しい職員名を入力してください。","error");
+              return;
+            }
+            save.disabled=true;
+            save.textContent="保存中...";
+            const result=await client.rpc("admin_rename_staff",{
+              p_staff_id:staff.id,
+              p_name:value
+            });
+            save.disabled=false;
+            save.textContent="保存";
+            if (result.error) {
+              showMessage("名前を変更できませんでした："+result.error.message,"error");
+              return;
+            }
+            await refreshAll();
+            showMessage("職員名を変更しました。");
+            return;
+          }
+
+          if (!/^[0-9]{4,6}$/.test(value)) {
+            showMessage("暗証番号は4〜6桁の数字にしてください。","error");
+            return;
+          }
+
+          save.disabled=true;
+          save.textContent="保存中...";
+          const result=await client.rpc("admin_set_staff_pin",{
+            p_staff_id:staff.id,
+            p_pin:value
+          });
+          save.disabled=false;
+          save.textContent="保存";
+
+          if (result.error) {
+            showMessage("暗証番号を設定できませんでした："+result.error.message,"error");
+            return;
+          }
+
+          closeInlineEditor();
+          showMessage(staff.name+" さんの暗証番号を設定しました。");
         });
 
-        if (result.error) {
-          showMessage("暗証番号を設定できませんでした："+result.error.message,"error");
+        input.addEventListener("keydown",e=>{
+          if (e.key==="Enter") save.click();
+        });
+
+        editor.appendChild(input);
+        editor.appendChild(save);
+        editor.appendChild(cancel);
+
+        setTimeout(()=>input.focus(),0);
+      }
+
+      const renameBtn=document.createElement("button");
+      renameBtn.type="button";
+      renameBtn.className="secondary small-btn";
+      renameBtn.textContent="名前変更";
+      renameBtn.addEventListener("click",()=>openTextEditor("rename"));
+
+      const pinBtn=document.createElement("button");
+      pinBtn.type="button";
+      pinBtn.className="success small-btn";
+      pinBtn.textContent="暗証番号";
+      pinBtn.addEventListener("click",()=>openTextEditor("pin"));
+
+      const del=document.createElement("button");
+      del.type="button";
+      del.className="danger small-btn";
+      del.textContent="削除";
+
+      let deleteArmed=false;
+      let deleteTimer=null;
+
+      del.addEventListener("click",async()=>{
+        if (!deleteArmed) {
+          deleteArmed=true;
+          del.textContent="もう一度押すと削除";
+          showMessage(staff.name+" さんを削除します。希望登録もすべて削除されます。もう一度「削除」を押してください。","error");
+          clearTimeout(deleteTimer);
+          deleteTimer=setTimeout(()=>{
+            deleteArmed=false;
+            del.textContent="削除";
+          },7000);
           return;
         }
 
-        showMessage(staff.name+" さんの暗証番号を設定しました。");
-      });
+        deleteArmed=false;
+        clearTimeout(deleteTimer);
+        del.disabled=true;
+        del.textContent="削除中...";
 
-      const del=document.createElement("button"); del.type="button"; del.className="danger small-btn"; del.textContent="削除";
-      del.addEventListener("click",async()=>{
-        if (!confirm(staff.name+" さんを削除しますか？\n希望登録もすべて削除されます。")) return;
-        if (!confirm("本当に削除しますか？ この操作は元に戻せません。")) return;
         const result=await client.rpc("admin_delete_staff",{p_staff_id:staff.id});
-        if (result.error) { showMessage("削除できませんでした："+result.error.message,"error"); return; }
-        await refreshAll(); showMessage(staff.name+" さんを削除しました。");
+
+        if (result.error) {
+          del.disabled=false;
+          del.textContent="削除";
+          showMessage("削除できませんでした："+result.error.message,"error");
+          return;
+        }
+
+        await refreshAll();
+        showMessage(staff.name+" さんを削除しました。");
       });
 
-      actions.appendChild(renameBtn); actions.appendChild(pinBtn); actions.appendChild(del);
-      row.appendChild(info); row.appendChild(actions); staffManageList.appendChild(row);
+      actions.appendChild(renameBtn);
+      actions.appendChild(pinBtn);
+      actions.appendChild(del);
+
+      row.appendChild(info);
+      row.appendChild(actions);
+      row.appendChild(editor);
+      staffManageList.appendChild(row);
     });
   }
 
