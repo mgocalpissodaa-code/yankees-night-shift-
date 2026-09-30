@@ -283,6 +283,7 @@
   }
 
   function ruleFromSetting(setting) {
+    if (!setting || setting.input_mode==="none") return null;
     const options=[];
 
     if (setting.input_mode==="off") {
@@ -418,7 +419,10 @@
       (settingsResult.data || []).forEach(setting=>{
         const staff=byId.get(String(setting.staff_id));
         if (!staff) return;
-        STAFF_RULES[canonicalStaffName(staff.name)]=ruleFromSetting(setting);
+        const key=canonicalStaffName(staff.name);
+        const rule=ruleFromSetting(setting);
+        if (rule) STAFF_RULES[key]=rule;
+        else STAFF_RULES[key]=null;
       });
     }
 
