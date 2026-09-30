@@ -2048,66 +2048,83 @@
       sheetXml=setRawNumber(sheetXml,sheetDoc,"A3",y);
       sheetXml=setRawNumber(sheetXml,sheetDoc,"B3",month);
 
-      const dayRows={
-        "藤井亮輔":findRowInOfficialSheet(sheetDoc,sharedStrings,"藤井亮輔",1,13),
-        "桑原莉子":findRowInOfficialSheet(sheetDoc,sharedStrings,"桑原莉子",1,13),
-        "古垣竜也":findRowInOfficialSheet(sheetDoc,sharedStrings,"古垣竜也",1,13)
-      };
-
+      const configuredRows=[];
+      const missing=[];
       const kamadaDayRow=
         findRowInOfficialSheet(sheetDoc,sharedStrings,"鎌田フサ子",1,13);
 
-      const nightRows={
-        "内藤昌子":findRowInOfficialSheet(sheetDoc,sharedStrings,"内藤昌子",13,22),
-        "前川良司":findRowInOfficialSheet(sheetDoc,sharedStrings,"前川良司",13,22),
-        "鹿島佑斗":findRowInOfficialSheet(sheetDoc,sharedStrings,"鹿島佑斗",13,22),
-        "鎌田フサ子":findRowInOfficialSheet(sheetDoc,sharedStrings,"鎌田フサ子",13,22)
-      };
+      for (const staff of staffs) {
+        const name=canonicalStaffName(staff.name);
+        const rule=getRuleByName(staff.name);
+        if (!rule || rule.mode==="none") continue;
 
-      const missing=[];
-      Object.entries(dayRows).forEach(([name,row])=>{ if(!row) missing.push(name); });
-      Object.entries(nightRows).forEach(([name,row])=>{ if(!row) missing.push(name); });
-      if (!kamadaDayRow) missing.push("鎌田フサ子（夜勤兼務）");
+        const registrations=[];
+        for (let day=1;day<=lastDay;day++) {
+          const key=dateKey(y,m,day);
+          const reg=findRegistrationByNameDate(staff.name,key);
+          if (reg) registrations.push({day,reg});
+        }
+
+        // その月に希望登録がない人は原本を触らない。
+        if (!registrations.length) continue;
+
+        let row=null;
+        if (rule.mode==="off") {
+          row=
+            findRowInOfficialSheet(sheetDoc,sharedStrings,staff.name,1,13) ||
+            findRowInOfficialSheet(sheetDoc,sharedStrings,staff.name,1,22);
+        } else {
+          row=
+            findRowInOfficialSheet(sheetDoc,sharedStrings,staff.name,13,22) ||
+            findRowInOfficialSheet(sheetDoc,sharedStrings,staff.name,1,22);
+        }
+
+        if (!row) {
+          missing.push(displayStaffName(staff.name));
+          continue;
+        }
+
+        configuredRows.push({
+          staff,
+          name,
+          rule,
+          row,
+          registrations
+        });
+      }
+
       if (missing.length) {
-        throw new Error("★原本.xlsxで職員行を確認できません："+missing.join("、"));
+        throw new Error(
+          "★原本.xlsxに職員行がありません："+missing.join("、")+
+          "。新しい職員は原本Excelにも職員名の行を追加してください。"
+        );
       }
 
       excelStage="希望反映";
       const timeCells=[];
+      const usedRows=new Set();
 
-      for (const [name,row] of Object.entries(dayRows)) {
-        for (let day=1;day<=lastDay;day++) {
-          const key=dateKey(y,m,day);
-          const reg=findRegistrationByNameDate(name,key);
-          if (reg && reg.shiftPattern==="OFF") {
-            sheetXml=setRawText(
-              sheetXml,
-              sheetDoc,
-              columnForDay(day)+row,
-              "公休"
-            );
-          } else if (reg && reg.shiftPattern==="PAID") {
-            sheetXml=setRawText(
-              sheetXml,
-              sheetDoc,
-              columnForDay(day)+row,
-              "有給"
-            );
+      for (const item of configuredRows) {
+        const {staff,name,rule,row,registrations}=item;
+        usedRows.add(row);
+
+        if (rule.mode==="off") {
+          for (const entry of registrations) {
+            const address=columnForDay(entry.day)+row;
+
+            if (
+              entry.reg.shiftPattern==="OFF" ||
+              entry.reg.shiftPattern==="PUBLIC_REST"
+            ) {
+              sheetXml=setRawText(sheetXml,sheetDoc,address,"公休");
+            } else if (entry.reg.shiftPattern==="PAID") {
+              sheetXml=setRawText(sheetXml,sheetDoc,address,"有給");
+            }
           }
-        }
-      }
-
-      for (const [name,row] of Object.entries(nightRows)) {
-        const registrations=[];
-
-        for (let day=1;day<=lastDay;day++) {
-          const key=dateKey(y,m,day);
-          const reg=findRegistrationByNameDate(name,key);
-          if (reg) registrations.push({day,reg});
+          continue;
         }
 
-        if (!registrations.length) continue;
-
+        // 勤務希望型は、希望登録がある月だけ未選択日を公休で埋める。
         for (let day=1;day<=lastDay;day++) {
           sheetXml=setRawText(
             sheetXml,
@@ -2117,43 +2134,55 @@
           );
         }
 
-        for (const item of registrations) {
-          const address=columnForDay(item.day)+row;
+        for (const entry of registrations) {
+          const address=columnForDay(entry.day)+row;
+          const pattern=entry.reg.shiftPattern;
 
-          if (item.reg.shiftPattern==="PAID") {
+          if (pattern==="PAID") {
             sheetXml=setRawText(sheetXml,sheetDoc,address,"有給");
-          } else if (name==="鎌田フサ子" && item.reg.shiftPattern==="PUBLIC_REST") {
+            continue;
+          }
+
+          if (pattern==="PUBLIC_REST") {
             sheetXml=setRawText(sheetXml,sheetDoc,address,"公休");
-          } else if (name==="鎌田フサ子" && item.reg.shiftPattern==="07:00-10:00") {
-            const kamadaAddress=columnForDay(item.day)+kamadaDayRow;
+            continue;
+          }
+
+          // 鎌田さんの7:00〜10:00だけは、原本どおり上段の「夜勤兼務」へ。
+          if (
+            name==="鎌田フサ子" &&
+            isConfiguredTime(staff.name,pattern,"07:00","10:00",false)
+          ) {
+            if (!kamadaDayRow) {
+              throw new Error("★原本.xlsxに鎌田さんの「夜勤兼務」行がありません。");
+            }
+
+            const kamadaAddress=columnForDay(entry.day)+kamadaDayRow;
             sheetXml=setRawText(
               sheetXml,
               sheetDoc,
               kamadaAddress,
-              excelPattern(item.reg.shiftPattern,name)
+              excelPattern(pattern,staff.name)
             );
             timeCells.push(kamadaAddress);
+            usedRows.add(kamadaDayRow);
+
+            // 下段の夜勤欄は公休のまま。
             sheetXml=setRawText(sheetXml,sheetDoc,address,"公休");
-          } else {
-            const label=excelPattern(
-              item.reg.shiftPattern || defaultPatternForName(name),
-              name
-            );
-            if (label) {
-              sheetXml=setRawText(sheetXml,sheetDoc,address,label);
-              timeCells.push(address);
-            }
+            continue;
+          }
+
+          const label=excelPattern(pattern,staff.name);
+          if (label) {
+            sheetXml=setRawText(sheetXml,sheetDoc,address,label);
+            timeCells.push(address);
           }
         }
       }
 
       for (let day=lastDay+1;day<=31;day++) {
         const col=columnForDay(day);
-        for (const row of [
-          ...Object.values(dayRows),
-          kamadaDayRow,
-          ...Object.values(nightRows)
-        ]) {
+        for (const row of usedRows) {
           sheetXml=clearRawCell(sheetXml,sheetDoc,col+row);
         }
       }
