@@ -86,7 +86,6 @@ as $func$
   join public.staff_shift_settings cfg
     on cfg.staff_id = s.id
   where s.active = true
-    and cfg.input_mode <> 'none'
   order by s.name;
 $func$;
 
