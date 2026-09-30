@@ -174,7 +174,7 @@
     <div class="card">
       <h2>職員管理</h2>
       <div class="sub">
-        職員の追加、名前変更、削除ができます。
+        職員の追加、名前変更、暗証番号設定、削除ができます。暗証番号は4〜6桁の数字です。
       </div>
       <div class="form-grid" style="margin-top:12px;">
         <div>
@@ -472,6 +472,34 @@
         await refreshAll(); showMessage("職員名を変更しました。");
       });
 
+      const pinBtn=document.createElement("button"); pinBtn.type="button"; pinBtn.className="success small-btn"; pinBtn.textContent="暗証番号";
+      pinBtn.addEventListener("click",async()=>{
+        const pin=prompt(staff.name+" さんの暗証番号を4〜6桁の数字で入力してください。");
+        if (pin===null) return;
+        if (!/^[0-9]{4,6}$/.test(pin.trim())) {
+          showMessage("暗証番号は4〜6桁の数字にしてください。","error");
+          return;
+        }
+        const confirmPin=prompt("確認のため、同じ暗証番号をもう一度入力してください。");
+        if (confirmPin===null) return;
+        if (pin.trim()!==confirmPin.trim()) {
+          showMessage("暗証番号が一致しません。","error");
+          return;
+        }
+
+        const result=await client.rpc("admin_set_staff_pin",{
+          p_staff_id:staff.id,
+          p_pin:pin.trim()
+        });
+
+        if (result.error) {
+          showMessage("暗証番号を設定できませんでした："+result.error.message,"error");
+          return;
+        }
+
+        showMessage(staff.name+" さんの暗証番号を設定しました。");
+      });
+
       const del=document.createElement("button"); del.type="button"; del.className="danger small-btn"; del.textContent="削除";
       del.addEventListener("click",async()=>{
         if (!confirm(staff.name+" さんを削除しますか？\n希望登録もすべて削除されます。")) return;
@@ -481,7 +509,7 @@
         await refreshAll(); showMessage(staff.name+" さんを削除しました。");
       });
 
-      actions.appendChild(renameBtn); actions.appendChild(del);
+      actions.appendChild(renameBtn); actions.appendChild(pinBtn); actions.appendChild(del);
       row.appendChild(info); row.appendChild(actions); staffManageList.appendChild(row);
     });
   }
