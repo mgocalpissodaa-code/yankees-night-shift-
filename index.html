@@ -81,7 +81,21 @@
     .register-btn { background:#2563eb; color:#fff; }
     .register-btn:disabled { opacity:.4; }
     .cancel-btn { background:#fee2e2; color:#b91c1c; margin-top:8px; }
-    .message { display:none; padding:12px; margin-bottom:12px; border-radius:12px; font-size:14px; font-weight:800; }
+    .message {
+      display:none;
+      position:fixed;
+      top:calc(env(safe-area-inset-top, 0px) + 12px);
+      left:50%;
+      transform:translateX(-50%);
+      width:min(calc(100% - 24px),760px);
+      z-index:9999;
+      padding:12px;
+      margin:0;
+      border-radius:12px;
+      font-size:14px;
+      font-weight:800;
+      box-shadow:0 8px 28px rgba(15,23,42,.22);
+    }
     .message.success { display:block; background:#dcfce7; color:#166534; }
     .message.error { display:block; background:#fee2e2; color:#991b1b; }
     .loading { text-align:center; padding:28px; color:#64748b; }
@@ -318,7 +332,6 @@
   function showMessage(text, type = "success") {
     message.className = `message ${type}`;
     message.textContent = text;
-    window.scrollTo({top:0, behavior:"smooth"});
     setTimeout(() => { message.className = "message"; }, 4500);
   }
 
