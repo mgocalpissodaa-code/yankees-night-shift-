@@ -182,6 +182,8 @@
   let selectedDates = new Set();
   let verifiedStaffId = "";
   let verifiedPin = "";
+  let cancelArmed = false;
+  let cancelArmTimer = null;
 
   const staffSelect = document.getElementById("staffSelect");
   const patternCard = document.getElementById("patternCard");
@@ -608,6 +610,8 @@
   }
 
   staffSelect.addEventListener("change", () => {
+    cancelArmed = false;
+    clearTimeout(cancelArmTimer);
     resetPinVerification();
     updateStaffMode();
   });
@@ -715,17 +719,28 @@
     );
     if (!dates.length) return;
 
-    const rule = selectedRule();
-    const ok = confirm(
-      `${dates.length}日分の${rule && rule.mode === "off" ? "休み希望" : "勤務希望"}を取り消しますか？`
-    );
-    if (!ok) return;
+    // LINE等のアプリ内ブラウザではconfirmが動かないことがあるため、
+    // 2回タップ方式で取り消し確認を行う。
+    if (!cancelArmed) {
+      cancelArmed = true;
+      cancelBtn.textContent = `もう一度押すと取り消します（${dates.length}日）`;
+      showMessage("確認のため、赤い取消ボタンをもう一度押してください。", "error");
+      clearTimeout(cancelArmTimer);
+      cancelArmTimer = setTimeout(() => {
+        cancelArmed = false;
+        updateActionArea();
+      }, 7000);
+      return;
+    }
 
+    cancelArmed = false;
+    clearTimeout(cancelArmTimer);
     cancelBtn.disabled = true;
     cancelBtn.textContent = "取消中...";
 
     let success = 0;
     let failed = 0;
+    let lastError = "";
 
     for (const workDate of dates) {
       const {error} = await client.rpc("cancel_shift_request_with_pin", {
@@ -733,16 +748,26 @@
         p_work_date:workDate,
         p_pin:verifiedPin
       });
-      if (error) failed++;
-      else success++;
+      if (error) {
+        failed++;
+        lastError = error.message || String(error);
+      } else {
+        success++;
+      }
     }
 
     cancelBtn.disabled = false;
     selectedDates.clear();
     await loadSchedule();
 
-    if (failed === 0) showMessage(`${success}日分を取り消しました。`);
-    else showMessage(`${success}日分を取り消しました。 ${failed}日は取り消せませんでした。`, "error");
+    if (failed === 0) {
+      showMessage(`${success}日分を取り消しました。`);
+    } else {
+      showMessage(
+        `${success}日分を取り消しました。 ${failed}日は取り消せませんでした。${lastError ? " 原因：" + lastError : ""}`,
+        "error"
+      );
+    }
   });
 
   document.getElementById("prevMonth").addEventListener("click", async () => {
