@@ -112,6 +112,14 @@
       <option value="">名前を選択してください</option>
     </select>
     <div id="modeInfo" class="mode-box">先に名前を選択してください。</div>
+    <div id="pinArea" class="hidden" style="margin-top:12px;">
+      <label for="pinInput">暗証番号</label>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;">
+        <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="4〜6桁の数字">
+        <button id="verifyPinBtn" type="button" class="register-btn" style="padding:10px 14px;">確認</button>
+      </div>
+      <div id="pinStatus" class="sub" style="margin-top:7px;">名前ごとの暗証番号を入力してください。</div>
+    </div>
   </div>
 
   <div id="patternCard" class="card hidden">
@@ -172,6 +180,8 @@
   let schedule = {};
   let holidays = {};
   let selectedDates = new Set();
+  let verifiedStaffId = "";
+  let verifiedPin = "";
 
   const staffSelect = document.getElementById("staffSelect");
   const patternCard = document.getElementById("patternCard");
@@ -179,6 +189,10 @@
   const patternLabelEl = document.getElementById("patternLabel");
   const patternHelp = document.getElementById("patternHelp");
   const modeInfo = document.getElementById("modeInfo");
+  const pinArea = document.getElementById("pinArea");
+  const pinInput = document.getElementById("pinInput");
+  const verifyPinBtn = document.getElementById("verifyPinBtn");
+  const pinStatus = document.getElementById("pinStatus");
   const calendar = document.getElementById("calendar");
   const monthTitle = document.getElementById("monthTitle");
   const deadlineInfo = document.getElementById("deadlineInfo");
@@ -374,6 +388,24 @@
     renderCalendar();
   }
 
+  function pinVerifiedForSelectedStaff() {
+    const staff = selectedStaff();
+    return !!staff &&
+      String(staff.id) === String(verifiedStaffId) &&
+      !!verifiedPin;
+  }
+
+  function resetPinVerification() {
+    verifiedStaffId = "";
+    verifiedPin = "";
+    pinInput.value = "";
+    pinInput.disabled = false;
+    verifyPinBtn.disabled = false;
+    verifyPinBtn.textContent = "確認";
+    pinStatus.textContent = "名前ごとの暗証番号を入力してください。";
+    pinStatus.style.color = "#64748b";
+  }
+
   function updateRegisterButtonText() {
     const rule = selectedRule();
     const pattern = chosenPattern();
@@ -399,10 +431,29 @@
 
     if (!staff || !rule) {
       modeInfo.textContent = "先に名前を選択してください。";
+      pinArea.classList.add("hidden");
       patternCard.classList.add("hidden");
       renderCalendar();
       return;
     }
+
+    pinArea.classList.remove("hidden");
+
+    if (!pinVerifiedForSelectedStaff()) {
+      modeInfo.textContent = "暗証番号を入力して本人確認してください。";
+      patternCard.classList.add("hidden");
+      selectedInfo.textContent = "暗証番号を確認してください";
+      registerBtn.disabled = true;
+      cancelBtn.style.display = "none";
+      renderCalendar();
+      return;
+    }
+
+    pinStatus.textContent = "本人確認済み";
+    pinStatus.style.color = "#166534";
+    pinInput.disabled = true;
+    verifyPinBtn.disabled = true;
+    verifyPinBtn.textContent = "確認済み";
 
     patternSelect.innerHTML = "";
     rule.options.forEach(opt => {
@@ -484,6 +535,10 @@
             showMessage("先に自分の名前を選択してください。", "error");
             return;
           }
+          if (!pinVerifiedForSelectedStaff()) {
+            showMessage("先に暗証番号を確認してください。", "error");
+            return;
+          }
           if (selectedDates.has(key)) selectedDates.delete(key);
           else selectedDates.add(key);
           renderCalendar();
@@ -503,6 +558,13 @@
 
     if (!staff || !rule) {
       selectedInfo.textContent = "先に名前を選択してください";
+      registerBtn.disabled = true;
+      cancelBtn.style.display = "none";
+      return;
+    }
+
+    if (!pinVerifiedForSelectedStaff()) {
+      selectedInfo.textContent = "暗証番号を確認してください";
       registerBtn.disabled = true;
       cancelBtn.style.display = "none";
       return;
@@ -545,7 +607,49 @@
       : "選択した自分の登録を取り消す";
   }
 
-  staffSelect.addEventListener("change", updateStaffMode);
+  staffSelect.addEventListener("change", () => {
+    resetPinVerification();
+    updateStaffMode();
+  });
+
+  verifyPinBtn.addEventListener("click", async () => {
+    const staff = selectedStaff();
+    const pin = pinInput.value.trim();
+
+    if (!staff) {
+      showMessage("先に自分の名前を選択してください。", "error");
+      return;
+    }
+    if (!/^[0-9]{4,6}$/.test(pin)) {
+      showMessage("暗証番号は4〜6桁の数字で入力してください。", "error");
+      return;
+    }
+
+    verifyPinBtn.disabled = true;
+    verifyPinBtn.textContent = "確認中...";
+
+    const result = await client.rpc("verify_staff_pin", {
+      p_staff_id: staff.id,
+      p_pin: pin
+    });
+
+    if (result.error || result.data !== true) {
+      verifyPinBtn.disabled = false;
+      verifyPinBtn.textContent = "確認";
+      pinStatus.textContent = "暗証番号が違います。";
+      pinStatus.style.color = "#991b1b";
+      return;
+    }
+
+    verifiedStaffId = String(staff.id);
+    verifiedPin = pin;
+    updateStaffMode();
+  });
+
+  pinInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") verifyPinBtn.click();
+  });
+
   patternSelect.addEventListener("change", () => {
     updateRegisterButtonText();
     updateActionArea();
@@ -558,7 +662,10 @@
     }
     const staff = selectedStaff();
     const pattern = chosenPattern();
-    if (!staff || !pattern) return;
+    if (!staff || !pattern || !pinVerifiedForSelectedStaff()) {
+      showMessage("名前と暗証番号を確認してください。", "error");
+      return;
+    }
 
     const dates = [...selectedDates].filter(d => {
       const own = (schedule[d] || []).find(p => String(p.staffId) === String(staff.id));
@@ -574,10 +681,11 @@
     let failed = 0;
 
     for (const workDate of dates) {
-      const {error} = await client.rpc("register_shift_request", {
+      const {error} = await client.rpc("register_shift_request_with_pin", {
         p_staff_id:staff.id,
         p_work_date:workDate,
-        p_shift_pattern:pattern
+        p_shift_pattern:pattern,
+        p_pin:verifiedPin
       });
       if (error) failed++;
       else success++;
@@ -597,7 +705,10 @@
       return;
     }
     const staff = selectedStaff();
-    if (!staff) return;
+    if (!staff || !pinVerifiedForSelectedStaff()) {
+      showMessage("名前と暗証番号を確認してください。", "error");
+      return;
+    }
 
     const dates = [...selectedDates].filter(d =>
       (schedule[d] || []).some(p => String(p.staffId) === String(staff.id))
@@ -617,9 +728,10 @@
     let failed = 0;
 
     for (const workDate of dates) {
-      const {error} = await client.rpc("cancel_shift_request", {
+      const {error} = await client.rpc("cancel_shift_request_with_pin", {
         p_staff_id:staff.id,
-        p_work_date:workDate
+        p_work_date:workDate,
+        p_pin:verifiedPin
       });
       if (error) failed++;
       else success++;
