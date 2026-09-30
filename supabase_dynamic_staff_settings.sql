@@ -67,7 +67,6 @@ on conflict (staff_id) do nothing;
 create or replace function public.get_staff_shift_settings()
 returns table (
   staff_id uuid,
-  staff_name text,
   input_mode text,
   allow_paid boolean,
   allow_public_rest boolean,
@@ -95,6 +94,7 @@ $func$;
 create or replace function public.admin_list_staff_shift_settings()
 returns table (
   staff_id uuid,
+  staff_name text,
   input_mode text,
   allow_paid boolean,
   allow_public_rest boolean,
@@ -156,8 +156,325 @@ begin
     select 1
     from jsonb_array_elements(v_options) x
     where coalesce(x->>'value','') = ''
-       or coalesce(x->>'start','') !~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$'
+       or coalesce(x->>'start','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]
        or coalesce(x->>'end','') !~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$'
+       or coalesce(jsonb_typeof(x->'next_day'),'') <> 'boolean'
+  ) then
+    raise exception '勤務時間は開始・終了時刻と翌日設定を確認してください。';
+  end if;
+
+  if p_input_mode <> 'work' then
+    v_options := '[]'::jsonb;
+  end if;
+
+  insert into public.staff_shift_settings (
+    staff_id,
+    input_mode,
+    allow_paid,
+    allow_public_rest,
+    shift_options,
+    updated_at
+  )
+  values (
+    p_staff_id,
+    p_input_mode,
+    coalesce(p_allow_paid,false),
+    coalesce(p_allow_public_rest,false),
+    v_options,
+    now()
+  )
+  on conflict (staff_id)
+  do update set
+    input_mode = excluded.input_mode,
+    allow_paid = excluded.allow_paid,
+    allow_public_rest = excluded.allow_public_rest,
+    shift_options = excluded.shift_options,
+    updated_at = now();
+
+  return jsonb_build_object('ok',true,'staff_id',p_staff_id);
+end;
+$func$;
+
+
+-- 登録時の勤務パターン判定を、職員ごとの勤務設定から確認する。
+create or replace function public.register_shift_request(
+  p_staff_id uuid,
+  p_work_date date,
+  p_shift_pattern text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $func$
+declare
+  v_active boolean;
+  v_mode text;
+  v_allow_paid boolean;
+  v_allow_public_rest boolean;
+  v_options jsonb;
+  v_allowed boolean := false;
+begin
+  if p_work_date is null then
+    raise exception '日付を選択してください。';
+  end if;
+
+  if p_work_date < (timezone('Asia/Tokyo', now()))::date then
+    raise exception '過去の日付には登録できません。';
+  end if;
+
+  -- 職員画面は前月23日23:59まで。管理者は締切後も変更可能。
+  if coalesce(auth.jwt() ->> 'email','') <> 'admin@example.com'
+     and timezone('Asia/Tokyo', now()) >=
+       (date_trunc('month', p_work_date::timestamp)
+        - interval '1 month'
+        + interval '23 days') then
+    raise exception 'この月の希望入力は締め切りました。締切は前月23日23:59です。';
+  end if;
+
+  select
+    s.active,
+    cfg.input_mode,
+    cfg.allow_paid,
+    cfg.allow_public_rest,
+    cfg.shift_options
+  into
+    v_active,
+    v_mode,
+    v_allow_paid,
+    v_allow_public_rest,
+    v_options
+  from public.staffs s
+  left join public.staff_shift_settings cfg
+    on cfg.staff_id = s.id
+  where s.id = p_staff_id;
+
+  if coalesce(v_active,false) = false then
+    raise exception '対象の職員が見つかりません。';
+  end if;
+
+  if coalesce(v_mode,'none') = 'none' then
+    raise exception 'この職員はWeb入力なしに設定されています。';
+  end if;
+
+  if p_shift_pattern = 'PAID' and coalesce(v_allow_paid,false) then
+    v_allowed := true;
+  elsif p_shift_pattern = 'PUBLIC_REST' and coalesce(v_allow_public_rest,false) then
+    v_allowed := true;
+  elsif p_shift_pattern = 'OFF' and v_mode = 'off' then
+    v_allowed := true;
+  elsif v_mode = 'work' and exists (
+    select 1
+    from jsonb_array_elements(coalesce(v_options,'[]'::jsonb)) x
+    where x->>'value' = p_shift_pattern
+  ) then
+    v_allowed := true;
+  end if;
+
+  if not v_allowed then
+    raise exception 'この職員の勤務設定では選択できない内容です。';
+  end if;
+
+  insert into public.night_availability (
+    staff_id,
+    work_date,
+    shift_pattern
+  )
+  values (
+    p_staff_id,
+    p_work_date,
+    p_shift_pattern
+  )
+  on conflict (staff_id, work_date)
+  do update
+    set shift_pattern = excluded.shift_pattern;
+
+  return jsonb_build_object(
+    'ok', true,
+    'staff_id', p_staff_id,
+    'work_date', p_work_date,
+    'shift_pattern', p_shift_pattern
+  );
+end;
+$func$;
+
+
+revoke all on function public.get_staff_shift_settings() from public;
+revoke all on function public.admin_list_staff_shift_settings() from public;
+revoke all on function public.admin_set_staff_shift_settings(uuid,text,boolean,boolean,jsonb) from public;
+
+grant execute on function public.get_staff_shift_settings()
+to anon, authenticated;
+
+grant execute on function public.admin_list_staff_shift_settings()
+to authenticated;
+
+grant execute on function public.admin_set_staff_shift_settings(uuid,text,boolean,boolean,jsonb)
+to authenticated;
+
+-- 暗証番号経由の登録は引き続き利用。
+revoke execute on function public.register_shift_request(uuid,date,text) from anon;
+grant execute on function public.register_shift_request(uuid,date,text) to authenticated;
+
+       or coalesce(x->>'end','') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]
+       or jsonb_typeof(x->'next_day') <> 'boolean'
+  ) then
+    raise exception '勤務時間は開始・終了時刻と翌日設定を確認してください。';
+  end if;
+
+  if p_input_mode <> 'work' then
+    v_options := '[]'::jsonb;
+  end if;
+
+  insert into public.staff_shift_settings (
+    staff_id,
+    input_mode,
+    allow_paid,
+    allow_public_rest,
+    shift_options,
+    updated_at
+  )
+  values (
+    p_staff_id,
+    p_input_mode,
+    coalesce(p_allow_paid,false),
+    coalesce(p_allow_public_rest,false),
+    v_options,
+    now()
+  )
+  on conflict (staff_id)
+  do update set
+    input_mode = excluded.input_mode,
+    allow_paid = excluded.allow_paid,
+    allow_public_rest = excluded.allow_public_rest,
+    shift_options = excluded.shift_options,
+    updated_at = now();
+
+  return jsonb_build_object('ok',true,'staff_id',p_staff_id);
+end;
+$func$;
+
+
+-- 登録時の勤務パターン判定を、職員ごとの勤務設定から確認する。
+create or replace function public.register_shift_request(
+  p_staff_id uuid,
+  p_work_date date,
+  p_shift_pattern text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $func$
+declare
+  v_active boolean;
+  v_mode text;
+  v_allow_paid boolean;
+  v_allow_public_rest boolean;
+  v_options jsonb;
+  v_allowed boolean := false;
+begin
+  if p_work_date is null then
+    raise exception '日付を選択してください。';
+  end if;
+
+  if p_work_date < (timezone('Asia/Tokyo', now()))::date then
+    raise exception '過去の日付には登録できません。';
+  end if;
+
+  -- 職員画面は前月23日23:59まで。管理者は締切後も変更可能。
+  if coalesce(auth.jwt() ->> 'email','') <> 'admin@example.com'
+     and timezone('Asia/Tokyo', now()) >=
+       (date_trunc('month', p_work_date::timestamp)
+        - interval '1 month'
+        + interval '23 days') then
+    raise exception 'この月の希望入力は締め切りました。締切は前月23日23:59です。';
+  end if;
+
+  select
+    s.active,
+    cfg.input_mode,
+    cfg.allow_paid,
+    cfg.allow_public_rest,
+    cfg.shift_options
+  into
+    v_active,
+    v_mode,
+    v_allow_paid,
+    v_allow_public_rest,
+    v_options
+  from public.staffs s
+  left join public.staff_shift_settings cfg
+    on cfg.staff_id = s.id
+  where s.id = p_staff_id;
+
+  if coalesce(v_active,false) = false then
+    raise exception '対象の職員が見つかりません。';
+  end if;
+
+  if coalesce(v_mode,'none') = 'none' then
+    raise exception 'この職員はWeb入力なしに設定されています。';
+  end if;
+
+  if p_shift_pattern = 'PAID' and coalesce(v_allow_paid,false) then
+    v_allowed := true;
+  elsif p_shift_pattern = 'PUBLIC_REST' and coalesce(v_allow_public_rest,false) then
+    v_allowed := true;
+  elsif p_shift_pattern = 'OFF' and v_mode = 'off' then
+    v_allowed := true;
+  elsif v_mode = 'work' and exists (
+    select 1
+    from jsonb_array_elements(coalesce(v_options,'[]'::jsonb)) x
+    where x->>'value' = p_shift_pattern
+  ) then
+    v_allowed := true;
+  end if;
+
+  if not v_allowed then
+    raise exception 'この職員の勤務設定では選択できない内容です。';
+  end if;
+
+  insert into public.night_availability (
+    staff_id,
+    work_date,
+    shift_pattern
+  )
+  values (
+    p_staff_id,
+    p_work_date,
+    p_shift_pattern
+  )
+  on conflict (staff_id, work_date)
+  do update
+    set shift_pattern = excluded.shift_pattern;
+
+  return jsonb_build_object(
+    'ok', true,
+    'staff_id', p_staff_id,
+    'work_date', p_work_date,
+    'shift_pattern', p_shift_pattern
+  );
+end;
+$func$;
+
+
+revoke all on function public.get_staff_shift_settings() from public;
+revoke all on function public.admin_list_staff_shift_settings() from public;
+revoke all on function public.admin_set_staff_shift_settings(uuid,text,boolean,boolean,jsonb) from public;
+
+grant execute on function public.get_staff_shift_settings()
+to anon, authenticated;
+
+grant execute on function public.admin_list_staff_shift_settings()
+to authenticated;
+
+grant execute on function public.admin_set_staff_shift_settings(uuid,text,boolean,boolean,jsonb)
+to authenticated;
+
+-- 暗証番号経由の登録は引き続き利用。
+revoke execute on function public.register_shift_request(uuid,date,text) from anon;
+grant execute on function public.register_shift_request(uuid,date,text) to authenticated;
+
        or jsonb_typeof(x->'next_day') <> 'boolean'
   ) then
     raise exception '勤務時間は開始・終了時刻と翌日設定を確認してください。';
