@@ -271,17 +271,73 @@
     return patternSelect.value;
   }
 
-  function patternLabel(value) {
+  function shortTime(text) {
+    return String(text || "").replace(/^0(?=\d:)/,"");
+  }
+
+  function timeOptionLabel(opt) {
+    if (!opt) return "";
+    const start=shortTime(opt.start);
+    const end=shortTime(opt.end);
+    return start+"〜"+(opt.next_day ? "翌" : "")+end;
+  }
+
+  function ruleFromSetting(setting) {
+    const options=[];
+
+    if (setting.input_mode==="off") {
+      options.push({value:"OFF",label:"休み希望"});
+    }
+
+    if (setting.input_mode==="work") {
+      (setting.shift_options || []).forEach(opt=>{
+        options.push({
+          value:opt.value,
+          label:timeOptionLabel(opt),
+          start:opt.start,
+          end:opt.end,
+          next_day:!!opt.next_day
+        });
+      });
+    }
+
+    if (setting.allow_public_rest) {
+      options.push({value:"PUBLIC_REST",label:"公休"});
+    }
+
+    if (setting.allow_paid) {
+      options.push({value:"PAID",label:"有給"});
+    }
+
+    return {
+      mode:setting.input_mode,
+      title:setting.input_mode==="off"
+        ? "休み希望 / 有給"
+        : "働ける日 / 公休 / 有給",
+      options
+    };
+  }
+
+  function patternLabel(value, staffName) {
+    if (value==="OFF") return "休";
+    if (value==="PUBLIC_REST") return "公休";
+    if (value==="PAID") return "有給";
+
+    if (staffName) {
+      const rule=getRuleByName(staffName);
+      const opt=rule && rule.options
+        ? rule.options.find(x=>x.value===value)
+        : null;
+      if (opt) return opt.label;
+    }
+
     const labels = {
-      "OFF":"休",
-      "PUBLIC_REST":"公休",
-      "PAID":"有給",
       "22:00-03:00":"22-翌3",
       "22:00-06:00":"22-翌6",
       "07:00-06:00":"7-翌6",
       "07:00-10:00":"7-10"
     };
-    return labels[value] || "";
+    return labels[value] || value || "";
   }
 
   function defaultPatternForName(name) {
@@ -352,7 +408,21 @@
       return;
     }
 
-    staffs = (data || []).filter(staff => !!getRuleByName(staff.name));
+    const rawStaffs=data || [];
+
+    // 新しい勤務設定SQLが入っていれば、管理画面で保存した設定を優先。
+    // SQL未実行の場合は、現在の固定設定をそのまま使えるようにする。
+    const settingsResult=await client.rpc("get_staff_shift_settings");
+    if (!settingsResult.error) {
+      const byId=new Map(rawStaffs.map(s=>[String(s.id),s]));
+      (settingsResult.data || []).forEach(setting=>{
+        const staff=byId.get(String(setting.staff_id));
+        if (!staff) return;
+        STAFF_RULES[canonicalStaffName(staff.name)]=ruleFromSetting(setting);
+      });
+    }
+
+    staffs = rawStaffs.filter(staff => !!getRuleByName(staff.name));
     staffSelect.innerHTML = '<option value="">名前を選択してください</option>';
 
     staffs.forEach(staff => {
@@ -539,7 +609,7 @@
         <div class="date-num ${dateClass}">${day}</div>
         <div class="count">${assigned.length}人登録</div>
         ${assigned.map(person =>
-          `<div class="staff-name">${displayStaffName(person.staffName)} ${patternLabel(person.shiftPattern)}</div>`
+          `<div class="staff-name">${displayStaffName(person.staffName)} ${patternLabel(person.shiftPattern, person.staffName)}</div>`
         ).join("")}
         ${isSelected ? '<div class="selected-mark">✓ 選択中</div>' : ""}
       `;
