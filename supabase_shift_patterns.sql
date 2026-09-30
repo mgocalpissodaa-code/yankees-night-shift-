@@ -35,8 +35,13 @@ begin
     raise exception '日付を選択してください。';
   end if;
 
-  if p_work_date < current_date then
+  if p_work_date < (timezone('Asia/Tokyo', now()))::date then
     raise exception '過去の日付には登録できません。';
+  end if;
+
+  if timezone('Asia/Tokyo', now()) >=
+     (date_trunc('month', p_work_date::timestamp) - interval '1 month' + interval '23 days') then
+    raise exception 'この月の希望入力は締め切りました。締切は前月23日23:59です。';
   end if;
 
   select replace(replace(s.name, ' ', ''), '　', '')
@@ -122,6 +127,45 @@ as $func$
   order by n.work_date, s.name;
 $func$;
 
+create or replace function public.cancel_shift_request(
+  p_staff_id uuid,
+  p_work_date date
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $func$
+declare
+  v_deleted integer;
+begin
+  if p_staff_id is null or p_work_date is null then
+    raise exception '職員と日付を選択してください。';
+  end if;
+
+  if timezone('Asia/Tokyo', now()) >=
+     (date_trunc('month', p_work_date::timestamp) - interval '1 month' + interval '23 days') then
+    raise exception 'この月の希望変更・取消は締め切りました。締切は前月23日23:59です。';
+  end if;
+
+  delete from public.night_availability
+  where staff_id = p_staff_id
+    and work_date = p_work_date;
+
+  get diagnostics v_deleted = row_count;
+
+  if v_deleted = 0 then
+    raise exception '対象の登録が見つかりません。';
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'staff_id', p_staff_id,
+    'work_date', p_work_date
+  );
+end;
+$func$;
+
 create or replace function public.admin_cancel_shift_request(
   p_staff_id uuid,
   p_work_date date
@@ -191,11 +235,13 @@ end;
 $func$;
 
 revoke all on function public.register_shift_request(uuid, date, text) from public;
+revoke all on function public.cancel_shift_request(uuid, date) from public;
 revoke all on function public.get_shift_schedule(date, date) from public;
 revoke all on function public.admin_cancel_shift_request(uuid, date) from public;
 revoke all on function public.admin_bulk_cancel_shift_requests(uuid, date[]) from public;
 
 grant execute on function public.register_shift_request(uuid, date, text) to anon, authenticated;
+grant execute on function public.cancel_shift_request(uuid, date) to anon, authenticated;
 grant execute on function public.get_shift_schedule(date, date) to anon, authenticated;
 grant execute on function public.admin_cancel_shift_request(uuid, date) to authenticated;
 grant execute on function public.admin_bulk_cancel_shift_requests(uuid, date[]) to authenticated;
