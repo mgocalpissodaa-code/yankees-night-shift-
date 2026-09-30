@@ -67,6 +67,7 @@ on conflict (staff_id) do nothing;
 create or replace function public.get_staff_shift_settings()
 returns table (
   staff_id uuid,
+  staff_name text,
   input_mode text,
   allow_paid boolean,
   allow_public_rest boolean,
@@ -111,6 +112,7 @@ begin
   return query
   select
     s.id,
+    s.name,
     coalesce(cfg.input_mode,'none') as input_mode,
     coalesce(cfg.allow_paid,false) as allow_paid,
     coalesce(cfg.allow_public_rest,false) as allow_public_rest,
