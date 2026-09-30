@@ -245,3 +245,138 @@ grant execute on function public.cancel_shift_request(uuid, date) to anon, authe
 grant execute on function public.get_shift_schedule(date, date) to anon, authenticated;
 grant execute on function public.admin_cancel_shift_request(uuid, date) to authenticated;
 grant execute on function public.admin_bulk_cancel_shift_requests(uuid, date[]) to authenticated;
+
+
+-- ===== 職員本人確認（名前 + 暗証番号） =====
+create extension if not exists pgcrypto;
+
+create table if not exists public.staff_pins (
+  staff_id uuid primary key references public.staffs(id) on delete cascade,
+  pin_hash text not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.staff_pins enable row level security;
+revoke all on table public.staff_pins from anon, authenticated;
+
+create or replace function public.admin_set_staff_pin(
+  p_staff_id uuid,
+  p_pin text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $func$
+begin
+  if coalesce(auth.jwt() ->> 'email', '') <> 'admin@example.com' then
+    raise exception '管理者としてログインしてください。';
+  end if;
+
+  if p_pin is null or p_pin !~ '^[0-9]{4,6}$' then
+    raise exception '暗証番号は4〜6桁の数字にしてください。';
+  end if;
+
+  if not exists (
+    select 1 from public.staffs
+    where id = p_staff_id
+  ) then
+    raise exception '対象の職員が見つかりません。';
+  end if;
+
+  insert into public.staff_pins (staff_id, pin_hash, updated_at)
+  values (
+    p_staff_id,
+    crypt(p_pin, gen_salt('bf')),
+    now()
+  )
+  on conflict (staff_id)
+  do update set
+    pin_hash = excluded.pin_hash,
+    updated_at = now();
+
+  return jsonb_build_object('ok', true, 'staff_id', p_staff_id);
+end;
+$func$;
+
+create or replace function public.verify_staff_pin(
+  p_staff_id uuid,
+  p_pin text
+)
+returns boolean
+language sql
+security definer
+set search_path = public, extensions
+as $func$
+  select exists (
+    select 1
+    from public.staffs s
+    join public.staff_pins p on p.staff_id = s.id
+    where s.id = p_staff_id
+      and s.active = true
+      and p_pin ~ '^[0-9]{4,6}$'
+      and p.pin_hash = crypt(p_pin, p.pin_hash)
+  );
+$func$;
+
+create or replace function public.register_shift_request_with_pin(
+  p_staff_id uuid,
+  p_work_date date,
+  p_shift_pattern text,
+  p_pin text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $func$
+begin
+  if not public.verify_staff_pin(p_staff_id, p_pin) then
+    raise exception '暗証番号が違います。';
+  end if;
+
+  return public.register_shift_request(
+    p_staff_id,
+    p_work_date,
+    p_shift_pattern
+  );
+end;
+$func$;
+
+create or replace function public.cancel_shift_request_with_pin(
+  p_staff_id uuid,
+  p_work_date date,
+  p_pin text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $func$
+begin
+  if not public.verify_staff_pin(p_staff_id, p_pin) then
+    raise exception '暗証番号が違います。';
+  end if;
+
+  return public.cancel_shift_request(
+    p_staff_id,
+    p_work_date
+  );
+end;
+$func$;
+
+revoke all on function public.admin_set_staff_pin(uuid, text) from public;
+revoke all on function public.verify_staff_pin(uuid, text) from public;
+revoke all on function public.register_shift_request_with_pin(uuid, date, text, text) from public;
+revoke all on function public.cancel_shift_request_with_pin(uuid, date, text) from public;
+
+grant execute on function public.admin_set_staff_pin(uuid, text) to authenticated;
+grant execute on function public.verify_staff_pin(uuid, text) to anon, authenticated;
+grant execute on function public.register_shift_request_with_pin(uuid, date, text, text) to anon, authenticated;
+grant execute on function public.cancel_shift_request_with_pin(uuid, date, text) to anon, authenticated;
+
+-- 暗証番号を通らず直接登録・取消できないようにする。
+revoke execute on function public.register_shift_request(uuid, date, text) from anon;
+revoke execute on function public.cancel_shift_request(uuid, date) from anon;
+grant execute on function public.register_shift_request(uuid, date, text) to authenticated;
+grant execute on function public.cancel_shift_request(uuid, date) to authenticated;
