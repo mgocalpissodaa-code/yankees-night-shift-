@@ -73,8 +73,19 @@
     .selected-mark { margin-top:5px; color:#2563eb; font-size:11px; font-weight:800; text-align:center; }
     .selected-info { margin-top:10px; text-align:center; font-weight:800; color:#475569; }
     .message {
-      display:none; padding:12px; margin-bottom:12px; border-radius:12px;
-      font-size:14px; font-weight:800;
+      display:none;
+      position:fixed;
+      top:calc(env(safe-area-inset-top, 0px) + 12px);
+      left:50%;
+      transform:translateX(-50%);
+      width:min(calc(100% - 24px),760px);
+      z-index:9999;
+      padding:12px;
+      margin:0;
+      border-radius:12px;
+      font-size:14px;
+      font-weight:800;
+      box-shadow:0 8px 28px rgba(15,23,42,.22);
     }
     .message.ok { display:block; background:#dcfce7; color:#166534; }
     .message.error { display:block; background:#fee2e2; color:#991b1b; }
@@ -407,7 +418,6 @@
   function showMessage(text,type) {
     message.className="message " + (type || "ok");
     message.textContent=text;
-    window.scrollTo({top:0,behavior:"smooth"});
     setTimeout(()=>{message.className="message";},4500);
   }
   function fillPatternSelect(select,name,currentValue) {
