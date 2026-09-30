@@ -325,6 +325,7 @@
   currentDate.setDate(1);
   let staffs = [];
   let managedStaffs = [];
+  let staffSettings = new Map();
   let schedule = {};
   let holidays = {};
   let selectedDates = new Set();
@@ -402,21 +403,82 @@
     const d = new Date();
     return dateKey(d.getFullYear(),d.getMonth(),d.getDate());
   }
-  function patternLabel(value) {
+  function shortTime(text) {
+    return String(text || "").replace(/^0(?=\d:)/,"");
+  }
+
+  function timeOptionLabel(opt) {
+    if (!opt) return "";
+    return shortTime(opt.start)+"〜"+(opt.next_day ? "翌" : "")+shortTime(opt.end);
+  }
+
+  function ruleFromSetting(setting) {
+    if (!setting || setting.input_mode==="none") return null;
+
+    const options=[];
+    if (setting.input_mode==="off") {
+      options.push({value:"OFF",label:"休み希望"});
+    }
+
+    if (setting.input_mode==="work") {
+      (setting.shift_options || []).forEach(opt=>{
+        options.push({
+          value:opt.value,
+          label:timeOptionLabel(opt),
+          start:opt.start,
+          end:opt.end,
+          next_day:!!opt.next_day
+        });
+      });
+    }
+
+    if (setting.allow_public_rest) {
+      options.push({value:"PUBLIC_REST",label:"公休"});
+    }
+    if (setting.allow_paid) {
+      options.push({value:"PAID",label:"有給"});
+    }
+
+    return {
+      mode:setting.input_mode,
+      title:setting.input_mode==="off" ? "休み希望 / 有給" : "勤務希望",
+      options
+    };
+  }
+
+  function patternLabel(value,staffName) {
+    if (value==="OFF") return "休";
+    if (value==="PUBLIC_REST") return "公休";
+    if (value==="PAID") return "有給";
+
+    if (staffName) {
+      const rule=getRuleByName(staffName);
+      const opt=rule && rule.options
+        ? rule.options.find(x=>x.value===value)
+        : null;
+      if (opt) return opt.label;
+    }
+
     const x={
-      "OFF":"休",
-      "PUBLIC_REST":"公休",
-      "PAID":"有給",
       "22:00-03:00":"22-翌3",
       "22:00-06:00":"22-翌6",
       "07:00-06:00":"7-翌6",
       "07:00-10:00":"7-10"
     };
-    return x[value] || "";
+    return x[value] || value || "";
   }
-  function excelPattern(value) {
-    // Excelでは開始時刻と終了時刻を必ず2段で表示する。
-    // セルの値には改行(LF)だけを入れ、原本の色・条件付き書式は触らない。
+
+  function excelPattern(value,staffName) {
+    if (staffName) {
+      const rule=getRuleByName(staffName);
+      const opt=rule && rule.options
+        ? rule.options.find(x=>x.value===value)
+        : null;
+      if (opt && opt.start && opt.end) {
+        return shortTime(opt.start)+"\n"+(opt.next_day ? "翌" : "")+shortTime(opt.end);
+      }
+    }
+
     const x={
       "22:00-03:00":"22:00\n翌3:00",
       "22:00-06:00":"22:00\n翌6:00",
