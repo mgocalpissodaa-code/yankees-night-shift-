@@ -526,6 +526,21 @@
     return x[value] || value || "";
   }
 
+  function timeOptionForPattern(staffName,value) {
+    const rule=getRuleByName(staffName);
+    return rule && rule.options
+      ? rule.options.find(x=>x.value===value && x.start && x.end) || null
+      : null;
+  }
+
+  function isConfiguredTime(staffName,value,start,end,nextDay) {
+    const opt=timeOptionForPattern(staffName,value);
+    if (!opt) return false;
+    return opt.start===start &&
+      opt.end===end &&
+      !!opt.next_day===!!nextDay;
+  }
+
   function excelPattern(value,staffName) {
     if (staffName) {
       const rule=getRuleByName(staffName);
