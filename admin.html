@@ -118,6 +118,64 @@
       font-size:16px;
     }
     .staff-manage-inline button { white-space:nowrap; }
+    .staff-setting-panel {
+      width:100%;
+      margin-top:8px;
+      padding:10px;
+      border:1px solid #cbd5e1;
+      border-radius:12px;
+      background:#fff;
+    }
+    .setting-grid {
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:8px;
+      margin-top:8px;
+    }
+    .setting-checks {
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-top:10px;
+      font-weight:800;
+      font-size:13px;
+    }
+    .setting-checks label {
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .time-list { display:grid; gap:8px; margin-top:10px; }
+    .time-row {
+      display:grid;
+      grid-template-columns:1fr 1fr auto auto;
+      gap:6px;
+      align-items:center;
+      padding:8px;
+      border-radius:10px;
+      background:#f8fafc;
+      border:1px solid #e2e8f0;
+    }
+    .time-row input[type="time"] { min-width:0; }
+    .time-next {
+      display:flex;
+      align-items:center;
+      gap:4px;
+      font-size:12px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    .setting-actions {
+      display:flex;
+      gap:8px;
+      margin-top:10px;
+    }
+    @media (max-width:560px) {
+      .setting-grid { grid-template-columns:1fr; }
+      .time-row { grid-template-columns:1fr 1fr; }
+      .time-next { grid-column:1; }
+      .time-row .danger { grid-column:2; }
+    }
     .small-btn { padding:9px 11px; font-size:13px; }
     .count-summary {
       display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
@@ -584,27 +642,66 @@
 
   function renderManagedStaffs() {
     staffManageList.innerHTML="";
-    managedStaffs.forEach(staff=>{
-      const row=document.createElement("div"); row.className="staff-manage-row";
-      const info=document.createElement("div"); info.className="staff-manage-info";
-      const name=document.createElement("div"); name.className="staff-manage-name"; name.textContent=displayStaffName(staff.name);
-      const status=document.createElement("div"); status.className="staff-manage-status";
-      const rule=getRuleByName(staff.name);
-      status.textContent=rule ? (rule.mode==="off" ? "日勤・休み希望" : "勤務可能日") : "入力対象外";
-      info.appendChild(name); info.appendChild(status);
 
-      const actions=document.createElement("div"); actions.className="staff-manage-actions";
+    function settingStatusText(staff) {
+      const setting=staffSettings.get(String(staff.id));
+      if (!setting) {
+        const fallback=getRuleByName(staff.name);
+        return fallback
+          ? (fallback.mode==="off" ? "休み希望型（固定設定）" : "勤務希望型（固定設定）")
+          : "Web入力なし";
+      }
+      if (setting.input_mode==="none") return "Web入力なし";
+      if (setting.input_mode==="off") {
+        return "休み希望型"+(setting.allow_paid ? " / 有給あり" : "");
+      }
+      const count=(setting.shift_options || []).length;
+      return "勤務希望型 / 勤務時間 "+count+"件"+
+        (setting.allow_public_rest ? " / 公休あり" : "")+
+        (setting.allow_paid ? " / 有給あり" : "");
+    }
+
+    managedStaffs.forEach(staff=>{
+      const row=document.createElement("div");
+      row.className="staff-manage-row";
+
+      const info=document.createElement("div");
+      info.className="staff-manage-info";
+
+      const name=document.createElement("div");
+      name.className="staff-manage-name";
+      name.textContent=displayStaffName(staff.name);
+
+      const status=document.createElement("div");
+      status.className="staff-manage-status";
+      status.textContent=settingStatusText(staff);
+
+      info.appendChild(name);
+      info.appendChild(status);
+
+      const actions=document.createElement("div");
+      actions.className="staff-manage-actions";
 
       const editor=document.createElement("div");
       editor.className="staff-manage-inline";
       editor.style.display="none";
+
+      const settingPanel=document.createElement("div");
+      settingPanel.className="staff-setting-panel";
+      settingPanel.style.display="none";
 
       function closeInlineEditor() {
         editor.innerHTML="";
         editor.style.display="none";
       }
 
+      function closeSettingPanel() {
+        settingPanel.innerHTML="";
+        settingPanel.style.display="none";
+      }
+
       function openTextEditor(mode) {
+        closeSettingPanel();
         editor.innerHTML="";
         editor.style.display="grid";
 
@@ -632,7 +729,6 @@
         cancel.type="button";
         cancel.className="secondary small-btn";
         cancel.textContent="閉じる";
-
         cancel.addEventListener("click",closeInlineEditor);
 
         save.addEventListener("click",async()=>{
@@ -643,18 +739,23 @@
               showMessage("新しい職員名を入力してください。","error");
               return;
             }
+
             save.disabled=true;
             save.textContent="保存中...";
+
             const result=await client.rpc("admin_rename_staff",{
               p_staff_id:staff.id,
               p_name:value
             });
+
             save.disabled=false;
             save.textContent="保存";
+
             if (result.error) {
               showMessage("名前を変更できませんでした："+result.error.message,"error");
               return;
             }
+
             await refreshAll();
             showMessage("職員名を変更しました。");
             return;
@@ -667,10 +768,12 @@
 
           save.disabled=true;
           save.textContent="保存中...";
+
           const result=await client.rpc("admin_set_staff_pin",{
             p_staff_id:staff.id,
             p_pin:value
           });
+
           save.disabled=false;
           save.textContent="保存";
 
@@ -690,8 +793,234 @@
         editor.appendChild(input);
         editor.appendChild(save);
         editor.appendChild(cancel);
-
         setTimeout(()=>input.focus(),0);
+      }
+
+      function openShiftSettings() {
+        closeInlineEditor();
+        settingPanel.innerHTML="";
+        settingPanel.style.display="block";
+
+        const current=staffSettings.get(String(staff.id)) || {
+          staff_id:staff.id,
+          staff_name:staff.name,
+          input_mode:"none",
+          allow_paid:false,
+          allow_public_rest:false,
+          shift_options:[]
+        };
+
+        const title=document.createElement("div");
+        title.style.fontWeight="900";
+        title.textContent=displayStaffName(staff.name)+"さんの勤務設定";
+        settingPanel.appendChild(title);
+
+        const grid=document.createElement("div");
+        grid.className="setting-grid";
+
+        const modeWrap=document.createElement("div");
+        const modeLabel=document.createElement("label");
+        modeLabel.textContent="入力方法";
+        const modeSelect=document.createElement("select");
+        [
+          ["none","Web入力なし"],
+          ["off","休み希望型"],
+          ["work","勤務希望型"]
+        ].forEach(([value,label])=>{
+          const opt=document.createElement("option");
+          opt.value=value;
+          opt.textContent=label;
+          modeSelect.appendChild(opt);
+        });
+        modeSelect.value=current.input_mode || "none";
+        modeWrap.appendChild(modeLabel);
+        modeWrap.appendChild(modeSelect);
+
+        grid.appendChild(modeWrap);
+        settingPanel.appendChild(grid);
+
+        const checks=document.createElement("div");
+        checks.className="setting-checks";
+
+        const paidLabel=document.createElement("label");
+        const paid=document.createElement("input");
+        paid.type="checkbox";
+        paid.checked=!!current.allow_paid;
+        paidLabel.appendChild(paid);
+        paidLabel.appendChild(document.createTextNode("有給を選べる"));
+
+        const restLabel=document.createElement("label");
+        const publicRest=document.createElement("input");
+        publicRest.type="checkbox";
+        publicRest.checked=!!current.allow_public_rest;
+        restLabel.appendChild(publicRest);
+        restLabel.appendChild(document.createTextNode("公休を選べる"));
+
+        checks.appendChild(paidLabel);
+        checks.appendChild(restLabel);
+        settingPanel.appendChild(checks);
+
+        const timeSection=document.createElement("div");
+        const timeTitle=document.createElement("div");
+        timeTitle.style.cssText="margin-top:12px;font-weight:900;";
+        timeTitle.textContent="勤務時間";
+        timeSection.appendChild(timeTitle);
+
+        const timeList=document.createElement("div");
+        timeList.className="time-list";
+        timeSection.appendChild(timeList);
+
+        const addTime=document.createElement("button");
+        addTime.type="button";
+        addTime.className="secondary small-btn";
+        addTime.style.marginTop="8px";
+        addTime.textContent="＋ 勤務時間を追加";
+        timeSection.appendChild(addTime);
+
+        settingPanel.appendChild(timeSection);
+
+        function addTimeRow(opt) {
+          const tr=document.createElement("div");
+          tr.className="time-row";
+          tr.dataset.value=opt && opt.value ? opt.value : "";
+          tr.dataset.originalStart=opt && opt.start ? opt.start : "";
+          tr.dataset.originalEnd=opt && opt.end ? opt.end : "";
+          tr.dataset.originalNext=opt && opt.next_day ? "1" : "0";
+
+          const start=document.createElement("input");
+          start.type="time";
+          start.value=opt && opt.start ? opt.start : "22:00";
+          start.setAttribute("aria-label","開始時刻");
+
+          const end=document.createElement("input");
+          end.type="time";
+          end.value=opt && opt.end ? opt.end : "06:00";
+          end.setAttribute("aria-label","終了時刻");
+
+          const nextLabel=document.createElement("label");
+          nextLabel.className="time-next";
+          const next=document.createElement("input");
+          next.type="checkbox";
+          next.checked=opt ? !!opt.next_day : true;
+          nextLabel.appendChild(next);
+          nextLabel.appendChild(document.createTextNode("翌日"));
+
+          const remove=document.createElement("button");
+          remove.type="button";
+          remove.className="danger small-btn";
+          remove.textContent="削除";
+          remove.addEventListener("click",()=>tr.remove());
+
+          tr.appendChild(start);
+          tr.appendChild(end);
+          tr.appendChild(nextLabel);
+          tr.appendChild(remove);
+          timeList.appendChild(tr);
+        }
+
+        (current.shift_options || []).forEach(addTimeRow);
+        addTime.addEventListener("click",()=>addTimeRow(null));
+
+        const actionsRow=document.createElement("div");
+        actionsRow.className="setting-actions";
+
+        const save=document.createElement("button");
+        save.type="button";
+        save.className="success small-btn";
+        save.textContent="勤務設定を保存";
+
+        const close=document.createElement("button");
+        close.type="button";
+        close.className="secondary small-btn";
+        close.textContent="閉じる";
+        close.addEventListener("click",closeSettingPanel);
+
+        actionsRow.appendChild(save);
+        actionsRow.appendChild(close);
+        settingPanel.appendChild(actionsRow);
+
+        function refreshSettingVisibility() {
+          const isWork=modeSelect.value==="work";
+          timeSection.style.display=isWork ? "block" : "none";
+          restLabel.style.display=isWork ? "flex" : "none";
+          if (!isWork) publicRest.checked=false;
+        }
+
+        modeSelect.addEventListener("change",refreshSettingVisibility);
+        refreshSettingVisibility();
+
+        save.addEventListener("click",async()=>{
+          const mode=modeSelect.value;
+          const options=[];
+
+          if (mode==="work") {
+            const rows=Array.from(timeList.querySelectorAll(".time-row"));
+            if (!rows.length) {
+              showMessage("勤務希望型は勤務時間を1件以上追加してください。","error");
+              return;
+            }
+
+            for (const tr of rows) {
+              const inputs=tr.querySelectorAll('input[type="time"]');
+              const start=inputs[0].value;
+              const end=inputs[1].value;
+              const next=tr.querySelector('input[type="checkbox"]').checked;
+
+              if (!start || !end) {
+                showMessage("開始時刻と終了時刻を入力してください。","error");
+                return;
+              }
+
+              const unchanged=
+                tr.dataset.value &&
+                start===tr.dataset.originalStart &&
+                end===tr.dataset.originalEnd &&
+                (next ? "1" : "0")===tr.dataset.originalNext;
+
+              const value=unchanged
+                ? tr.dataset.value
+                : "TIME|"+start+"|"+end+"|"+(next ? "1" : "0");
+
+              if (options.some(x=>x.value===value)) {
+                showMessage("同じ勤務時間が重複しています。","error");
+                return;
+              }
+
+              options.push({
+                value,
+                start,
+                end,
+                next_day:next
+              });
+            }
+          }
+
+          save.disabled=true;
+          save.textContent="保存中...";
+
+          const result=await client.rpc("admin_set_staff_shift_settings",{
+            p_staff_id:staff.id,
+            p_input_mode:mode,
+            p_allow_paid:mode==="none" ? false : paid.checked,
+            p_allow_public_rest:mode==="work" ? publicRest.checked : false,
+            p_shift_options:options
+          });
+
+          save.disabled=false;
+          save.textContent="勤務設定を保存";
+
+          if (result.error) {
+            showMessage(
+              "勤務設定を保存できませんでした："+result.error.message+
+              "（Supabaseの勤務設定SQLが未実行の場合はSQL Editorで実行してください）",
+              "error"
+            );
+            return;
+          }
+
+          await refreshAll();
+          showMessage(staff.name+" さんの勤務設定を保存しました。");
+        });
       }
 
       const renameBtn=document.createElement("button");
@@ -699,6 +1028,12 @@
       renameBtn.className="secondary small-btn";
       renameBtn.textContent="名前変更";
       renameBtn.addEventListener("click",()=>openTextEditor("rename"));
+
+      const settingBtn=document.createElement("button");
+      settingBtn.type="button";
+      settingBtn.className="primary small-btn";
+      settingBtn.textContent="勤務設定";
+      settingBtn.addEventListener("click",openShiftSettings);
 
       const pinBtn=document.createElement("button");
       pinBtn.type="button";
@@ -718,7 +1053,10 @@
         if (!deleteArmed) {
           deleteArmed=true;
           del.textContent="もう一度押すと削除";
-          showMessage(staff.name+" さんを削除します。希望登録もすべて削除されます。もう一度「削除」を押してください。","error");
+          showMessage(
+            staff.name+" さんを削除します。希望登録もすべて削除されます。もう一度「削除」を押してください。",
+            "error"
+          );
           clearTimeout(deleteTimer);
           deleteTimer=setTimeout(()=>{
             deleteArmed=false;
@@ -746,12 +1084,14 @@
       });
 
       actions.appendChild(renameBtn);
+      actions.appendChild(settingBtn);
       actions.appendChild(pinBtn);
       actions.appendChild(del);
 
       row.appendChild(info);
       row.appendChild(actions);
       row.appendChild(editor);
+      row.appendChild(settingPanel);
       staffManageList.appendChild(row);
     });
   }
@@ -822,7 +1162,7 @@
 
       assigned.forEach(person=>{
         const tag=document.createElement("button"); tag.type="button"; tag.className="staff-tag";
-        tag.textContent=displayStaffName(person.staffName)+" "+patternLabel(person.shiftPattern);
+        tag.textContent=displayStaffName(person.staffName)+" "+patternLabel(person.shiftPattern,person.staffName);
         tag.addEventListener("click",ev=>{ev.stopPropagation();openEdit(key,person);});
         el.appendChild(tag);
       });
@@ -945,7 +1285,7 @@
     clearTimeout(editCancelTimer);
     cancelRegistrationBtn.textContent="この登録を取り消す";
     selectedRegistration={workDate,staffId:person.staffId,staffName:person.staffName,shiftPattern:person.shiftPattern};
-    editOriginal.textContent=workDate+"　"+displayStaffName(person.staffName)+"　"+patternLabel(person.shiftPattern);
+    editOriginal.textContent=workDate+"　"+displayStaffName(person.staffName)+"　"+patternLabel(person.shiftPattern,person.staffName);
     editStaff.value=person.staffId;
     editDate.value=workDate;
     editDate.min=todayKey();
@@ -962,6 +1302,7 @@
   }
 
   async function refreshAll() {
+    await loadStaffShiftSettings();
     await loadStaffs();
     await loadManagedStaffs();
     await loadSchedule();
@@ -1774,13 +2115,14 @@
               sheetXml,
               sheetDoc,
               kamadaAddress,
-              excelPattern(item.reg.shiftPattern)
+              excelPattern(item.reg.shiftPattern,name)
             );
             timeCells.push(kamadaAddress);
             sheetXml=setRawText(sheetXml,sheetDoc,address,"公休");
           } else {
             const label=excelPattern(
-              item.reg.shiftPattern || defaultPatternForName(name)
+              item.reg.shiftPattern || defaultPatternForName(name),
+              name
             );
             if (label) {
               sheetXml=setRawText(sheetXml,sheetDoc,address,label);
@@ -1848,7 +2190,7 @@
 
   async function enterAdmin() {
     loginView.classList.add("hidden"); adminView.classList.remove("hidden");
-    await loadHolidays(); await loadStaffs(); await loadManagedStaffs(); await loadSchedule();
+    await loadHolidays(); await loadStaffShiftSettings(); await loadStaffs(); await loadManagedStaffs(); await loadSchedule();
   }
   async function start() {
     const result=await client.auth.getSession();
