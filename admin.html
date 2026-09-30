@@ -303,6 +303,8 @@
   let holidays = {};
   let selectedDates = new Set();
   let selectedRegistration = null;
+  let editCancelArmed = false;
+  let editCancelTimer = null;
 
   const loginView = document.getElementById("loginView");
   const adminView = document.getElementById("adminView");
@@ -699,6 +701,9 @@
   }
 
   function openEdit(workDate,person) {
+    editCancelArmed=false;
+    clearTimeout(editCancelTimer);
+    cancelRegistrationBtn.textContent="この登録を取り消す";
     selectedRegistration={workDate,staffId:person.staffId,staffName:person.staffName,shiftPattern:person.shiftPattern};
     editOriginal.textContent=workDate+"　"+displayStaffName(person.staffName)+"　"+patternLabel(person.shiftPattern);
     editStaff.value=person.staffId;
@@ -708,7 +713,13 @@
     editCard.classList.remove("hidden");
     editCard.scrollIntoView({behavior:"smooth",block:"start"});
   }
-  function closeEdit() { selectedRegistration=null; editCard.classList.add("hidden"); }
+  function closeEdit() {
+    editCancelArmed=false;
+    clearTimeout(editCancelTimer);
+    cancelRegistrationBtn.textContent="この登録を取り消す";
+    selectedRegistration=null;
+    editCard.classList.add("hidden");
+  }
 
   async function refreshAll() {
     await loadStaffs();
@@ -837,10 +848,36 @@
 
   cancelRegistrationBtn.addEventListener("click",async()=>{
     if (!selectedRegistration) return;
-    if (!confirm(selectedRegistration.workDate+" の "+selectedRegistration.staffName+" さんの登録を取り消しますか？")) return;
+
+    if (!editCancelArmed) {
+      editCancelArmed=true;
+      cancelRegistrationBtn.textContent="もう一度押すと取り消します";
+      showMessage("確認のため、赤い取消ボタンをもう一度押してください。","error");
+      clearTimeout(editCancelTimer);
+      editCancelTimer=setTimeout(()=>{
+        editCancelArmed=false;
+        cancelRegistrationBtn.textContent="この登録を取り消す";
+      },7000);
+      return;
+    }
+
+    editCancelArmed=false;
+    clearTimeout(editCancelTimer);
+    cancelRegistrationBtn.disabled=true;
+    cancelRegistrationBtn.textContent="取消中...";
+
     const r=await cancelOne(selectedRegistration.staffId,selectedRegistration.workDate);
-    if (r.error) { showMessage("取り消せませんでした："+r.error.message,"error"); return; }
-    closeEdit(); await loadSchedule(); showMessage("登録を取り消しました。");
+
+    cancelRegistrationBtn.disabled=false;
+    if (r.error) {
+      cancelRegistrationBtn.textContent="この登録を取り消す";
+      showMessage("取り消せませんでした："+r.error.message,"error");
+      return;
+    }
+
+    closeEdit();
+    await loadSchedule();
+    showMessage("登録を取り消しました。");
   });
   closeEditBtn.addEventListener("click",closeEdit);
 
