@@ -198,24 +198,6 @@
     </div>
 
     <div class="card">
-      <h2>新しく登録する</h2>
-      <div class="edit-grid">
-        <div>
-          <label for="staffSelect">職員名</label>
-          <select id="staffSelect"><option value="">職員を選択してください</option></select>
-        </div>
-        <div id="adminPatternWrap">
-          <label for="adminPatternSelect">希望内容 / 勤務時間</label>
-          <select id="adminPatternSelect"></select>
-        </div>
-        <div style="display:flex;align-items:end;">
-          <button id="registerBtn" class="primary full" disabled>選択した日に登録</button>
-        </div>
-      </div>
-      <div id="selectedInfo" class="selected-info">日付を選択してください</div>
-    </div>
-
-    <div class="card">
       <h2 id="countSummaryTitle">今月の登録日数</h2>
       <div id="countSummary" class="count-summary"></div>
     </div>
@@ -252,6 +234,24 @@
           選択した登録をまとめて取り消す
         </button>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>新しく登録する</h2>
+      <div class="edit-grid">
+        <div>
+          <label for="staffSelect">職員名</label>
+          <select id="staffSelect"><option value="">職員を選択してください</option></select>
+        </div>
+        <div id="adminPatternWrap">
+          <label for="adminPatternSelect">希望内容 / 勤務時間</label>
+          <select id="adminPatternSelect"></select>
+        </div>
+        <div style="display:flex;align-items:end;">
+          <button id="registerBtn" class="primary full" disabled>選択した日に登録</button>
+        </div>
+      </div>
+      <div id="selectedInfo" class="selected-info">日付を選択してください</div>
     </div>
 
     <div id="editCard" class="card hidden">
