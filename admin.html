@@ -522,27 +522,67 @@
     } catch(e) { holidays={}; }
   }
 
+  async function loadStaffShiftSettings() {
+    const result=await client.rpc("admin_list_staff_shift_settings");
+
+    if (result.error) {
+      staffSettings=new Map();
+      return false;
+    }
+
+    staffSettings=new Map();
+    (result.data || []).forEach(setting=>{
+      staffSettings.set(String(setting.staff_id),setting);
+      if (setting.staff_name) {
+        const rule=ruleFromSetting(setting);
+        const key=canonicalStaffName(setting.staff_name);
+        if (rule) STAFF_RULES[key]=rule;
+        else delete STAFF_RULES[key];
+      }
+    });
+
+    return true;
+  }
+
   async function loadStaffs() {
     const result=await client.rpc("get_active_staffs");
-    if (result.error) { showMessage("職員一覧を取得できませんでした："+result.error.message,"error"); return; }
-    staffs=(result.data || []).filter(s=>!!getRuleByName(s.name));
+    if (result.error) {
+      showMessage("職員一覧を取得できませんでした："+result.error.message,"error");
+      return;
+    }
+
+    const raw=result.data || [];
+    staffs=raw.filter(s=>!!getRuleByName(s.name));
+
     staffSelect.innerHTML='<option value="">職員を選択してください</option>';
     editStaff.innerHTML="";
+
     staffs.forEach(staff=>{
-      const a=document.createElement("option"); a.value=staff.id; a.textContent=displayStaffName(staff.name); staffSelect.appendChild(a);
-      const b=document.createElement("option"); b.value=staff.id; b.textContent=displayStaffName(staff.name); editStaff.appendChild(b);
+      const a=document.createElement("option");
+      a.value=staff.id;
+      a.textContent=displayStaffName(staff.name);
+      staffSelect.appendChild(a);
+
+      const b=document.createElement("option");
+      b.value=staff.id;
+      b.textContent=displayStaffName(staff.name);
+      editStaff.appendChild(b);
     });
+
     updateAdminPattern();
   }
 
   async function loadManagedStaffs() {
     const result=await client.rpc("admin_list_staffs");
-    if (result.error) { showMessage("職員管理を取得できませんでした："+result.error.message,"error"); return; }
+    if (result.error) {
+      showMessage("職員管理を取得できませんでした："+result.error.message,"error");
+      return;
+    }
     managedStaffs=result.data || [];
     renderManagedStaffs();
   }
 
-  function renderManagedStaffs() {
+  function renderManagedStaffs() {  function renderManagedStaffs() {
     staffManageList.innerHTML="";
     managedStaffs.forEach(staff=>{
       const row=document.createElement("div"); row.className="staff-manage-row";
