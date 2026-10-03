@@ -91,7 +91,14 @@
     .message.error { display:block; background:#fee2e2; color:#991b1b; }
     .login-wrap { max-width:480px; margin:70px auto 0; }
     .login-note { font-size:12px; color:#64748b; margin-top:8px; }
-    .edit-original { padding:10px; margin-bottom:10px; border-radius:10px; background:#f8fafc; font-weight:800; }
+    .edit-original {
+      padding:10px;
+      margin-bottom:10px;
+      border-radius:10px;
+      background:#f8fafc;
+      font-weight:800;
+      white-space:pre-wrap;
+    }
     .button-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
     .small-link { color:#2563eb; text-decoration:none; font-weight:700; font-size:14px; }
     .staff-manage-list { display:grid; gap:8px; margin-top:12px; }
@@ -1163,11 +1170,28 @@
     const y=currentDate.getFullYear(), m=currentDate.getMonth();
     const start=dateKey(y,m,1), end=dateKey(y,m,new Date(y,m+1,0).getDate());
 
-    let result=await client.rpc("get_shift_schedule",{p_start_date:start,p_end_date:end});
+    let result=await client.rpc("get_admin_shift_schedule_with_memo",{
+      p_start_date:start,
+      p_end_date:end
+    });
+
+    if (result.error) {
+      result=await client.rpc("get_shift_schedule",{p_start_date:start,p_end_date:end});
+    }
+
     if (result.error) {
       const fallback=await client.rpc("get_night_schedule",{p_start_date:start,p_end_date:end});
-      if (fallback.error) { showMessage("勤務状況を取得できませんでした："+fallback.error.message,"error"); return; }
-      result={data:(fallback.data || []).map(r=>({...r,shift_pattern:defaultPatternForName(r.staff_name)}))};
+      if (fallback.error) {
+        showMessage("勤務状況を取得できませんでした："+fallback.error.message,"error");
+        return;
+      }
+      result={
+        data:(fallback.data || []).map(r=>({
+          ...r,
+          shift_pattern:defaultPatternForName(r.staff_name),
+          memo:""
+        }))
+      };
     }
 
     schedule={};
@@ -1176,7 +1200,8 @@
       schedule[row.work_date].push({
         staffId:row.staff_id,
         staffName:row.staff_name,
-        shiftPattern:row.shift_pattern || defaultPatternForName(row.staff_name)
+        shiftPattern:row.shift_pattern || defaultPatternForName(row.staff_name),
+        memo:row.memo || ""
       });
     });
 
@@ -1225,7 +1250,10 @@
 
       assigned.forEach(person=>{
         const tag=document.createElement("button"); tag.type="button"; tag.className="staff-tag";
-        tag.textContent=displayStaffName(person.staffName)+" "+patternLabel(person.shiftPattern,person.staffName);
+        tag.textContent=
+          displayStaffName(person.staffName)+" "+
+          patternLabel(person.shiftPattern,person.staffName)+
+          (person.memo ? " 📝" : "");
         tag.addEventListener("click",ev=>{ev.stopPropagation();openEdit(key,person);});
         el.appendChild(tag);
       });
@@ -1343,12 +1371,29 @@
     });
   }
 
+  async function setAdminMemo(staffId,workDate,memo) {
+    return await client.rpc("admin_set_shift_memo",{
+      p_staff_id:staffId,
+      p_work_date:workDate,
+      p_memo:memo || ""
+    });
+  }
+
   function openEdit(workDate,person) {
     editCancelArmed=false;
     clearTimeout(editCancelTimer);
     cancelRegistrationBtn.textContent="この登録を取り消す";
-    selectedRegistration={workDate,staffId:person.staffId,staffName:person.staffName,shiftPattern:person.shiftPattern};
-    editOriginal.textContent=workDate+"　"+displayStaffName(person.staffName)+"　"+patternLabel(person.shiftPattern,person.staffName);
+    selectedRegistration={
+      workDate,
+      staffId:person.staffId,
+      staffName:person.staffName,
+      shiftPattern:person.shiftPattern,
+      memo:person.memo || ""
+    };
+    editOriginal.textContent=
+      workDate+"　"+displayStaffName(person.staffName)+"　"+
+      patternLabel(person.shiftPattern,person.staffName)+
+      (person.memo ? "\nメモ："+person.memo : "\nメモ：なし");
     editStaff.value=person.staffId;
     editDate.value=workDate;
     editDate.min=todayKey();
@@ -1494,7 +1539,20 @@
     if (already) { showMessage("変更先には、その職員がすでに登録されています。","error"); return; }
 
     const add=await registerOne(newStaff.id,newDate,newPattern);
-    if (add.error) { showMessage("変更先へ登録できませんでした："+add.error.message,"error"); return; }
+    if (add.error) {
+      showMessage("変更先へ登録できませんでした："+add.error.message,"error");
+      return;
+    }
+
+    if (old.memo) {
+      const memoMove=await setAdminMemo(newStaff.id,newDate,old.memo);
+      if (memoMove.error) {
+        await cancelOne(newStaff.id,newDate);
+        showMessage("メモを引き継げなかったため、変更を元に戻しました。","error");
+        return;
+      }
+    }
+
     const remove=await cancelOne(old.staffId,old.workDate);
     if (remove.error) {
       await cancelOne(newStaff.id,newDate);
