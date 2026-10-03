@@ -2285,6 +2285,37 @@
             continue;
           }
 
+          // 鎌田さんの7:00〜翌6:00は、上段「夜勤兼務」と下段の両方へ反映。
+          // 原本の月出勤日数は各行を別々に数えるため、両方の出勤日数に入る。
+          if (
+            name==="鎌田フサ子" &&
+            isConfiguredTime(staff.name,pattern,"07:00","06:00",true)
+          ) {
+            if (!kamadaDayRow) {
+              throw new Error("★原本.xlsxに鎌田さんの「夜勤兼務」行がありません。");
+            }
+
+            const label=excelPattern(pattern,staff.name);
+            const kamadaDayAddress=columnForDay(entry.day)+kamadaDayRow;
+
+            sheetXml=setRawText(
+              sheetXml,
+              sheetDoc,
+              kamadaDayAddress,
+              label
+            );
+            timeCells.push(kamadaDayAddress);
+
+            sheetXml=setRawText(
+              sheetXml,
+              sheetDoc,
+              address,
+              label
+            );
+            timeCells.push(address);
+            continue;
+          }
+
           // 鎌田さんの7:00〜10:00は上段の「夜勤兼務」へ。
           // 下段は公休にせず空白のままにする。
           if (
