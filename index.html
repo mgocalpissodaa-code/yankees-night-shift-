@@ -28,6 +28,17 @@
       width:100%; padding:14px; font-size:17px;
       border:1px solid #cbd5e1; border-radius:12px; background:#fff;
     }
+    textarea {
+      width:100%;
+      min-height:88px;
+      padding:13px;
+      border:1px solid #cbd5e1;
+      border-radius:12px;
+      background:#fff;
+      font:inherit;
+      font-size:16px;
+      resize:vertical;
+    }
     .mode-box {
       margin-top: 12px;
       padding: 12px;
@@ -142,6 +153,14 @@
     <div id="patternHelp" class="sub" style="margin-top:7px;">希望内容を選んでください。</div>
   </div>
 
+  <div id="memoCard" class="card hidden">
+    <label for="memoInput">メモ（任意）</label>
+    <textarea id="memoInput" maxlength="100" placeholder="例：日勤のみ可能／夜勤は難しい"></textarea>
+    <div class="sub" style="margin-top:7px;">
+      必要なときだけ入力してください。複数日を選んだ場合は、同じメモが選択した日すべてに付きます。
+    </div>
+  </div>
+
   <div class="card">
     <div class="month-nav">
       <button class="nav-btn" id="prevMonth">‹</button>
@@ -204,6 +223,8 @@
   const patternSelect = document.getElementById("patternSelect");
   const patternLabelEl = document.getElementById("patternLabel");
   const patternHelp = document.getElementById("patternHelp");
+  const memoCard = document.getElementById("memoCard");
+  const memoInput = document.getElementById("memoInput");
   const modeInfo = document.getElementById("modeInfo");
   const pinArea = document.getElementById("pinArea");
   const pinInput = document.getElementById("pinInput");
@@ -522,6 +543,8 @@
       modeInfo.textContent = "先に名前を選択してください。";
       pinArea.classList.add("hidden");
       patternCard.classList.add("hidden");
+      memoCard.classList.add("hidden");
+      memoInput.value = "";
       renderCalendar();
       return;
     }
@@ -531,6 +554,8 @@
     if (!pinVerifiedForSelectedStaff()) {
       modeInfo.textContent = "暗証番号を入力して本人確認してください。";
       patternCard.classList.add("hidden");
+      memoCard.classList.add("hidden");
+      memoInput.value = "";
       selectedInfo.textContent = "暗証番号を確認してください";
       registerBtn.disabled = true;
       cancelBtn.style.display = "none";
@@ -567,6 +592,8 @@
 
     if (rule.options.length > 1) patternCard.classList.remove("hidden");
     else patternCard.classList.add("hidden");
+
+    memoCard.classList.remove("hidden");
 
     updateRegisterButtonText();
     renderCalendar();
@@ -680,9 +707,10 @@
       (schedule[d] || []).some(p => String(p.staffId) === String(staff.id))
     );
 
+    const memo = memoInput.value.trim();
     const addOrChangeDates = dates.filter(d => {
       const own = (schedule[d] || []).find(p => String(p.staffId) === String(staff.id));
-      return !own || own.shiftPattern !== pattern;
+      return !own || own.shiftPattern !== pattern || memo.length > 0;
     });
 
     selectedInfo.textContent =
@@ -699,6 +727,7 @@
   staffSelect.addEventListener("change", () => {
     cancelArmed = false;
     clearTimeout(cancelArmTimer);
+    memoInput.value = "";
     resetPinVerification();
     updateStaffMode();
   });
@@ -746,6 +775,10 @@
     updateActionArea();
   });
 
+  memoInput.addEventListener("input", () => {
+    updateActionArea();
+  });
+
   registerBtn.addEventListener("click", async () => {
     if (!isSubmissionOpen()) {
       showMessage("この月の希望入力は締め切りました。", "error");
@@ -758,9 +791,10 @@
       return;
     }
 
+    const memo = memoInput.value.trim();
     const dates = [...selectedDates].filter(d => {
       const own = (schedule[d] || []).find(p => String(p.staffId) === String(staff.id));
-      return !own || own.shiftPattern !== pattern;
+      return !own || own.shiftPattern !== pattern || memo.length > 0;
     });
     if (!dates.length) return;
 
@@ -770,6 +804,7 @@
 
     let success = 0;
     let failed = 0;
+    let memoFailed = 0;
 
     for (const workDate of dates) {
       const {error} = await client.rpc("register_shift_request_with_pin", {
@@ -778,16 +813,37 @@
         p_shift_pattern:pattern,
         p_pin:verifiedPin
       });
-      if (error) failed++;
-      else success++;
+
+      if (error) {
+        failed++;
+        continue;
+      }
+
+      success++;
+
+      if (memo.length > 0) {
+        const memoResult = await client.rpc("set_shift_memo_with_pin", {
+          p_staff_id:staff.id,
+          p_work_date:workDate,
+          p_memo:memo,
+          p_pin:verifiedPin
+        });
+        if (memoResult.error) memoFailed++;
+      }
     }
 
     selectedDates.clear();
+    memoInput.value = "";
     await loadSchedule();
     registerBtn.textContent = originalText;
 
-    if (failed === 0) showMessage(`${success}日分を登録しました。`);
-    else showMessage(`${success}日登録、${failed}日は登録できませんでした。Supabaseの更新SQLが未実行の場合は管理者に確認してください。`, "error");
+    if (failed === 0 && memoFailed === 0) {
+      showMessage(`${success}日分を登録しました。`);
+    } else if (failed === 0 && memoFailed > 0) {
+      showMessage(`登録はできましたが、${memoFailed}日分のメモを保存できませんでした。メモ用SQLを確認してください。`, "error");
+    } else {
+      showMessage(`${success}日登録、${failed}日は登録できませんでした。`, "error");
+    }
   });
 
   cancelBtn.addEventListener("click", async () => {
@@ -860,12 +916,14 @@
   document.getElementById("prevMonth").addEventListener("click", async () => {
     currentDate.setMonth(currentDate.getMonth() - 1);
     selectedDates.clear();
+    memoInput.value = "";
     await loadSchedule();
   });
 
   document.getElementById("nextMonth").addEventListener("click", async () => {
     currentDate.setMonth(currentDate.getMonth() + 1);
     selectedDates.clear();
+    memoInput.value = "";
     await loadSchedule();
   });
 
