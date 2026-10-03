@@ -2214,6 +2214,27 @@
         const {staff,name,rule,row,registrations}=item;
         usedRows.add(row);
 
+        // 希望を入れていない日は「公休」で埋めず、空白にする。
+        for (let day=1;day<=lastDay;day++) {
+          sheetXml=clearRawCell(
+            sheetXml,
+            sheetDoc,
+            columnForDay(day)+row
+          );
+        }
+
+        // 鎌田さんの上段「夜勤兼務」も、未登録日は空白にする。
+        if (name==="鎌田フサ子" && kamadaDayRow) {
+          usedRows.add(kamadaDayRow);
+          for (let day=1;day<=lastDay;day++) {
+            sheetXml=clearRawCell(
+              sheetXml,
+              sheetDoc,
+              columnForDay(day)+kamadaDayRow
+            );
+          }
+        }
+
         if (rule.mode==="off") {
           for (const entry of registrations) {
             const address=columnForDay(entry.day)+row;
@@ -2230,31 +2251,42 @@
           continue;
         }
 
-        // 勤務希望型は、希望登録がある月だけ未選択日を公休で埋める。
-        for (let day=1;day<=lastDay;day++) {
-          sheetXml=setRawText(
-            sheetXml,
-            sheetDoc,
-            columnForDay(day)+row,
-            "公休"
-          );
-        }
-
         for (const entry of registrations) {
           const address=columnForDay(entry.day)+row;
           const pattern=entry.reg.shiftPattern;
 
           if (pattern==="PAID") {
             sheetXml=setRawText(sheetXml,sheetDoc,address,"有給");
+
+            // 鎌田さんは上段「夜勤兼務」も有給表示を合わせる。
+            if (name==="鎌田フサ子" && kamadaDayRow) {
+              sheetXml=setRawText(
+                sheetXml,
+                sheetDoc,
+                columnForDay(entry.day)+kamadaDayRow,
+                "有給"
+              );
+            }
             continue;
           }
 
           if (pattern==="PUBLIC_REST") {
             sheetXml=setRawText(sheetXml,sheetDoc,address,"公休");
+
+            // 鎌田さんは上段「夜勤兼務」も公休表示を合わせる。
+            if (name==="鎌田フサ子" && kamadaDayRow) {
+              sheetXml=setRawText(
+                sheetXml,
+                sheetDoc,
+                columnForDay(entry.day)+kamadaDayRow,
+                "公休"
+              );
+            }
             continue;
           }
 
-          // 鎌田さんの7:00〜10:00だけは、原本どおり上段の「夜勤兼務」へ。
+          // 鎌田さんの7:00〜10:00は上段の「夜勤兼務」へ。
+          // 下段は公休にせず空白のままにする。
           if (
             name==="鎌田フサ子" &&
             isConfiguredTime(staff.name,pattern,"07:00","10:00",false)
@@ -2271,10 +2303,6 @@
               excelPattern(pattern,staff.name)
             );
             timeCells.push(kamadaAddress);
-            usedRows.add(kamadaDayRow);
-
-            // 下段の夜勤欄は公休のまま。
-            sheetXml=setRawText(sheetXml,sheetDoc,address,"公休");
             continue;
           }
 
